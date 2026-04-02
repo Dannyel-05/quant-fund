@@ -10120,3 +10120,6 @@ Press Ctrl+C to stop cleanly
 2026-04-02 23:45:21,920 [WARNING] closeloop.autopsy.trade_autopsy: TradeAutopsy initialised without a ClosedLoopStore — persistence steps will be skipped.
 2026-04-02 23:45:21,921 [INFO] closeloop.autopsy.trade_autopsy: Autopsy complete | trade_id=-1 ticker=ACGL net_pnl=-1.40 regime=UNKNOWN
 2026-04-02 23:45:21,921 [INFO] execution.paper_trader: Closed ACGL @ 96.7400 | reason=atr_stop | P&L=-0.10%
+2026-04-03 00:00:03,437 [INFO] execution.trading_bot: [00:00] Open positions: 16
+[00:02] Data collection starting (7 collectors)...
+2026-04-03 00:02:16,943 [INFO] data.collectors.sec_fulltext_collector: SECFullTextCollector: running full daily scan...

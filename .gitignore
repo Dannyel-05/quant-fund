@@ -2,3 +2,7 @@ config/settings.yaml
 *.db
 logs/
 output/
+config/settings.yaml
+*.db
+logs/
+output/
