@@ -1,0 +1,44 @@
+================================
+MACRO BRIEFING — 2026-04-02 14:10
+================================
+
+MARKET REGIME: RISK_OFF (N/A% confidence)
+Strategy adjustment: 0.70x position sizes
+
+OVERNIGHT DEVELOPMENTS:
+  - Anthropic leaked 500,000 lines of its own source code - Axios
+  - Volkswagen deal with EV maker Xpeng shows how China tech threatens Western automakers - CNBC
+  - S&P 500 futures rise after major averages post best session since May: Live updates - CNBC
+  - Jamie Dimon Says Vital US Ensures Iran War Is ‘Successfully Completed’ - Bloomberg.com
+  - Nike Stock Slides on Tariff Impact Despite Earnings Beat; Turnaround Continues - Barron's
+
+SHIPPING STATUS:
+  Baltic Dry Index: 10.3 (PROXY) (+3.2% 1-week change)
+  Shipping Stress Index: NEUTRAL
+  Sector impact: SSI=1.35 — Importers/retailers at risk if SSI>1.5
+
+WEATHER ALERTS:
+  NONE
+
+INTEREST RATES:
+  10yr yield: 4.30%
+  2yr yield:  3.79%
+  Yield curve: +51bps — NORMAL
+  Credit spreads HY: 328bps (NORMAL)
+  Fed next meeting: 2026-05-06 — 34 days away
+
+CONSUMER HEALTH:
+  Consumer confidence: 56.6 vs N/A (SERIES_NOT_FOUND)
+  Jobless claims: 210,000 vs N/A
+  Overall: WEAK
+
+GEOPOLITICAL:
+  Active alerts:   NONE
+  Conflict level: LOW
+
+TODAY'S TRADING GUIDANCE:
+  Sectors to FAVOUR: Healthcare, Utilities, Consumer Staples
+  Sectors to AVOID:  Small Cap Growth, High Beta Tech, Cyclicals
+  Position sizing: 46% of normal (regime adjustment)
+
+================================

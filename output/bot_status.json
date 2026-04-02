@@ -1,0 +1,14 @@
+{
+  "status": "STARTING",
+  "timestamp": "2026-04-02T23:31:28.686312",
+  "running": true,
+  "paused": false,
+  "scan_count": 0,
+  "errors_today": 0,
+  "articles_fetched_today": 0,
+  "last_uk_scan": null,
+  "last_us_scan": null,
+  "last_data_collection": null,
+  "phase": "PHASE_3 | 489 trades | 0.50%\u20131.20% per position | max 120 positions | 111 trades to next phase",
+  "use_alpaca": true
+}

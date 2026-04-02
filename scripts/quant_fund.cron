@@ -1,0 +1,5 @@
+# QUANT-FUND BOT CRON — auto-managed by 'python3 main.py bot cron-setup'
+@reboot     cd /home/dannyelticala/quant-fund && python3 main.py bot start --background >> /home/dannyelticala/quant-fund/logs/bot_reboot.log 2>&1
+*/5 * * * * /home/dannyelticala/quant-fund/scripts/bot_watchdog.sh >> /home/dannyelticala/quant-fund/logs/watchdog_cron.log 2>&1
+0 6 * * 1-5 cd /home/dannyelticala/quant-fund && python3 -c "from data.universe_builder import UniverseBuilder; b=UniverseBuilder(); b.save(b.build())" >> /home/dannyelticala/quant-fund/logs/universe_rebuild.log 2>&1
+30 21 * * 1-5 cd /home/dannyelticala/quant-fund && python3 main.py paper_trade --once >> /home/dannyelticala/quant-fund/logs/eod_scan.log 2>&1

@@ -1,0 +1,104 @@
+INFO S&P 500 Wikipedia: 503 tickers
+INFO S&P 400 Wikipedia: 400 tickers
+INFO S&P 600 Wikipedia: 603 tickers
+INFO Nasdaq 100 Wikipedia: 101 tickers
+INFO ETF iwm holdings: 25 tickers
+INFO ETF ijr holdings: 25 tickers
+INFO ETF vb holdings: 25 tickers
+INFO ETF mdy holdings: 25 tickers
+INFO ETF qqq holdings: 25 tickers
+INFO ETF spy holdings: 25 tickers
+INFO ETF scha holdings: 25 tickers
+INFO ETF vtwo holdings: 25 tickers
+INFO ETF iwc holdings: 25 tickers
+INFO ETF vti holdings: 25 tickers
+WARNING HTTP 404 for https://stockanalysis.com/list/russell-2000/
+WARNING HTTP 404 for https://stockanalysis.com/list/russell-3000/
+INFO Micro Cap StockAnalysis: 0 tickers
+INFO FTSE 100 Wikipedia: 100 tickers
+INFO FTSE 250 Wikipedia: 250 tickers
+INFO ETF ewu holdings: 25 tickers
+INFO S&P 500 Wikipedia: 503 tickers
+Building universe from multiple sources...
+Fetching S&P 500 (Wikipedia)...
+  S&P 500: 503 so far
+Fetching S&P 400 (Wikipedia)...
+  +400 new (total: 903)
+Fetching S&P 600 (Wikipedia)...
+  +603 new (total: 1506)
+Fetching Nasdaq 100 (Wikipedia)...
+  +14 new (total: 1520)
+Fetching IWM holdings (StockAnalysis)...
+  +8 new (total: 1528)
+Fetching IJR holdings (StockAnalysis)...
+  +1 new (total: 1529)
+Fetching VB holdings (StockAnalysis)...
+  +3 new (total: 1532)
+Fetching MDY holdings (StockAnalysis)...
+  +0 new (total: 1532)
+Fetching QQQ holdings (StockAnalysis)...
+  +0 new (total: 1532)
+Fetching SPY holdings (StockAnalysis)...
+  +0 new (total: 1532)
+Fetching SCHA holdings (StockAnalysis)...
+  +5 new (total: 1537)
+Fetching VTWO holdings (StockAnalysis)...
+  +0 new (total: 1537)
+Fetching IWC holdings (StockAnalysis)...
+  +25 new (total: 1562)
+Fetching VTI holdings (StockAnalysis)...
+  +0 new (total: 1562)
+Fetching Russell 2000 (StockAnalysis)...
+  +0 new (total: 1562)
+Fetching Russell 3000 (StockAnalysis)...
+  +0 new (total: 1562)
+Fetching Micro Cap (StockAnalysis)...
+  +0 new (total: 1562)
+Adding supplemental small/mid-cap lists...
+  +212 new (total: 1774)
+Fetching FTSE 100 (Wikipedia)...
+  FTSE 100: 99 UK tickers
+Fetching FTSE 250 (Wikipedia)...
+  +247 new UK (total: 346)
+Fetching EWU (iShares UK) holdings...
+
+Totals before dedup: US=1774 UK=346
+
+Failed sources (3): Russell 2000 StockAnalysis, Russell 3000 StockAnalysis, Micro Cap StockAnalysis
+
+Saving tiered CSV files...
+
+Fetching S&P 500 membership for tier assignment...
+  S&P 500 set: 503 members for tier split
+Saved universe_us_tier1.csv: 1271 tickers
+Saved universe_us_tier2.csv: 503 tickers
+Saved universe_us_tier3.csv: 0 tickers
+Saved universe_us_micro.csv: 0 tickers
+Saved universe_uk_tier1.csv: 346 tickers
+Saved universe_uk_tier2.csv: 0 tickers
+Saved universe_all.csv: 2120 total tickers
+Updated universe_us.csv: 1774 tickers
+Updated universe_uk.csv: 346 tickers
+
+=== UNIVERSE BUILD COMPLETE ===
+  universe_us_tier1.csv: 1271 tickers
+  universe_us_tier2.csv: 503 tickers
+  universe_us_tier3.csv: 0 tickers
+  universe_us_micro.csv: 0 tickers
+  universe_uk_tier1.csv: 346 tickers
+  universe_uk_tier2.csv: 0 tickers
+  universe_all.csv: 2120 tickers
+  universe_us.csv: 1774 tickers
+  universe_uk.csv: 346 tickers
+
+Total US: 1774 | Total UK: 346
+
+=== SAMPLES ===
+
+universe_us_tier1.csv (first 10): ['AA', 'AAL', 'AAMI', 'AAOI', 'AAON', 'AAP', 'AAT', 'ABCB', 'ABG', 'ABM']
+
+universe_us_tier2.csv (first 10): ['A', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE', 'ADI', 'ADM']
+
+universe_uk_tier1.csv (first 10): ['AAF.L', 'AAL.L', 'AAS.L', 'ABDN.L', 'ABF.L', 'ADM.L', 'AEP.L', 'AGT.L', 'AIE.L', 'AJB.L']
+
+Failed sources: ['Russell 2000 StockAnalysis', 'Russell 3000 StockAnalysis', 'Micro Cap StockAnalysis']

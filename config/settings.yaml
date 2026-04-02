@@ -1,0 +1,765 @@
+alpaca:
+  enabled: true
+  paper_trading: true
+  base_url: "https://paper-api.alpaca.markets"
+  data_url: "https://data.alpaca.markets"
+altdata:
+  bonferroni_correction: true
+  collectors:
+    companies_house:
+      api_key: ''
+      enabled: true
+      scan_interval_hours: 6
+      watch_filing_types:
+      - CS01
+      - AA
+      - PSC
+      - TM01
+      - AP01
+    fred:
+      api_key: ''
+      enabled: true
+      scan_interval_hours: 24
+      series:
+      - UNRATE
+      - CPIAUCSL
+      - DGS10
+      - VIXCLS
+      - T10Y2Y
+      - DCOILWTICO
+      - DEXUSUK
+      - RETAILSMNSA
+      - INDPRO
+    google_trends:
+      enabled: true
+      geo_uk: GB
+      geo_us: US
+      lookback_days: 90
+      scan_interval_hours: 12
+    jobs:
+      enabled: true
+      scan_interval_hours: 24
+      sources:
+      - bls_api
+      - indeed_rss
+      - reed_uk
+      track_companies: true
+    lunar:
+      enabled: true
+      track_eclipses: true
+      track_perigee: true
+      track_phases: true
+    news:
+      enabled: true
+      rss_feeds:
+      - https://feeds.finance.yahoo.com/rss/2.0/headline
+      - https://feeds.bbci.co.uk/news/business/rss.xml
+      scan_interval_minutes: 20
+      sources:
+      - rss_feeds
+    reddit:
+      client_id: ''
+      client_secret: ''
+      enabled: true
+      lookback_hours: 48
+      min_upvotes: 10
+      scan_interval_minutes: 30
+      subreddits:
+      - wallstreetbets
+      - stocks
+      - investing
+      - UKInvesting
+      - pennystocks
+      - smallcapstocks
+      user_agent: quant-fund-scanner/1.0
+    sec_edgar:
+      enabled: true
+      form_types:
+      - '4'
+      - 13F
+      - 8-K
+      - SC 13G
+      scan_interval_hours: 4
+    shipping:
+      enabled: true
+      scan_interval_hours: 24
+    stocktwits:
+      enabled: true
+      min_watchers: 5
+      scan_interval_minutes: 15
+    weather:
+      api_key: ''
+      enabled: true
+      locations:
+        uk:
+        - London
+        - Manchester
+        - Birmingham
+        - Edinburgh
+        - Bristol
+        us:
+        - New York
+        - Chicago
+        - Los Angeles
+        - Houston
+        - Seattle
+      scan_interval_hours: 6
+    wikipedia:
+      enabled: true
+      lookback_days: 30
+      scan_interval_hours: 24
+      track_edit_frequency: true
+      track_page_views: true
+  enabled: true
+  learning:
+    model_versioning:
+      auto_rollback: true
+      comparison_window_days: 14
+      keep_all_versions: true
+      rollback_threshold: 0.1
+    online_learning:
+      decay_factor: 0.995
+      enabled: true
+      learning_rate: 0.01
+      min_samples_before_signal: 100
+    weekly_retrain:
+      day: sunday
+      enabled: true
+      lookback_days: 365
+      time: 02:00
+      validation_split: 0.2
+  log_path: logs/altdata.log
+  model_path: altdata/models/
+  nonsense_threshold: 0.05
+  signals:
+    independent_trading: true
+    min_confidence: 0.6
+    notification_methods:
+    - terminal
+    - log_file
+    - desktop_notification
+    notify_on_signal: true
+  storage_path: altdata/storage/altdata.db
+api_keys:
+  alpha_vantage: R8G4SV4CPZ5OR5X9
+  alpaca_api_key: "PKY7Q5K6CFDV4KBNCEDHZO2URZ"
+  alpaca_secret_key: "7VzSFkZtATuTzNu74ysb2kbYqYZ7eGWfyPj6dMmE56HH"
+  companies_house: ''
+  eia: tXTxoauJUngCQyISS4JBWlfwS7Ysgdq6QwljGWAf
+  esa_copernicus_password: Dragomiresti2024!
+  esa_copernicus_user: dannyelticala@gmail.com
+  finnhub: d76j3h1r01qtg3ndq54gd76j3h1r01qtg3ndq550
+  fred: 2f56d188e383e08ad2d5438210584abe
+  marketstack: 7436a1ae783eea92b8c1c85cb3095049
+  nasdaq_data_link: ES8zdjPCGhsNwN9CEUKH
+  news_api: a7fd4712fe044e66be7e27f58a708348
+  openweathermap: ab94a3ece8f2c0de634e41ccc1d3561f
+  polygon: "pakSWxKjET_yzTpKmqmVcQLr29SJyIrH"
+  quiver_quant: ""
+  reddit_client_id: ''
+  reddit_client_secret: ''
+  simfin: "19b4ca77-24df-434a-adfe-a0073128987f"
+  waqi: 0da34f68c35b4f9d7322e974db4f1d51f67e0244
+backtest:
+  benchmark_uk: ^FTSE
+  benchmark_us: ^GSPC
+  end_date: '2026-12-31'
+  initial_capital: 100000
+  monte_carlo_simulations: 1000
+  start_date: '2021-01-01'
+  stop_loss_pct: 0.25
+  test_pct: 0.15
+  train_pct: 0.7
+  validate_pct: 0.15
+closeloop:
+  autopsy:
+    capture_fields:
+    - pead_surprise_pct
+    - pead_signal_strength
+    - altdata_confluence_score
+    - deepdata_tier
+    - frontier_umci
+    - macro_regime
+    - vix_level
+    - transcript_score
+    - lunar_phase
+    - geomagnetic_kp
+    - congressional_signal
+    - short_squeeze_score
+    - options_smfi
+    - beat_quality
+    - hiring_momentum
+    - wikipedia_surge
+    - shipping_pressure
+    - weather_risk
+    - market_cap_usd
+    - avg_daily_volume
+    - bid_ask_spread_pct
+    - days_to_earnings
+    - sector
+    - market
+    - entry_timing_score
+    - scale_in_tranche
+    - peer_influence_score
+    - analyst_revision_momentum
+    - academic_tailwind_score
+    - news_financial_context_score
+    - index_rebalancing_pressure
+    - merger_spillover_flag
+    enabled: true
+  benchmark:
+    track_active_return: true
+    track_information_ratio: true
+    uk: ^FTSE
+    uk_smallcap: ^AXX
+    us: ^GSPC
+    us_smallcap: ^RUT
+  context:
+    academic_bridge:
+      enabled: true
+      relevance_threshold: 0.3
+      source: semantic_scholar
+    analyst_revisions:
+      enabled: true
+      lookback_days: 30
+      source: yfinance
+    index_rebalancing:
+      enabled: true
+      indices:
+      - ^GSPC
+      - ^RUT
+      - ^FTSE
+      - ^AXX
+      rebalance_window_days: 5
+    merger_spillover:
+      enabled: true
+      lookback_days: 30
+      peer_premium_multiplier: 0.3
+    news_financial_context:
+      enabled: true
+      lookback_quarters: 4
+    peer_influence:
+      enabled: true
+      influence_decay: 0.6
+      max_peers: 10
+  enabled: true
+  entry:
+    enabled: true
+    extension_threshold_atr: 2.0
+    learn_from_entries: true
+    max_wait_days: 5
+    min_entries_before_learning: 20
+    pullback_threshold_pct: 0.02
+    scale_in:
+      abort_if_no_confirmation_days: 10
+      confirmation_days: 3
+      enabled: true
+      momentum_threshold: 0.01
+      tranches:
+        first: 0.33
+        second: 0.33
+        third: 0.34
+  learning:
+    batch_retrain_day: sunday
+    batch_retrain_time: 03:00
+    fully_automatic: true
+    log_every_weight_change: true
+    max_weight_change_per_update: 0.15
+    min_trades_before_weight_update: 10
+    online_update_after_each_trade: true
+    soft_update_rate: 0.02
+    weight_bounds:
+      max: 3.0
+      min: 0.05
+  log_everything: true
+  log_path: logs/closeloop.log
+  storage_path: closeloop/storage/closeloop.db
+  stress:
+    crisis_scenarios: all
+    learning_mode: true
+    output_path: output/stress_tests/
+    prediction_confidence_threshold: 0.6
+    prediction_mode_min_trades: 50
+    run_monthly: true
+    run_on_new_position: true
+  tax:
+    bed_and_breakfast_days: 30
+    cgt_annual_allowance_gbp: 3000
+    cgt_rate_basic: 0.18
+    cgt_rate_higher: 0.24
+    jurisdiction: UK
+    loss_harvesting: true
+    tax_year_end_month: 4
+costs:
+  uk:
+    commission_per_trade_gbp: 3.0
+    short_availability_check: true
+    short_borrow_daily: 0.0002
+    slippage_pct: 0.002
+    stamp_duty_pct: 0.005
+  us:
+    commission_per_trade: 1.0
+    short_borrow_daily: 0.0001
+    slippage_pct: 0.001
+    stamp_duty_pct: 0.0
+deepdata:
+  congressional:
+    accuracy_window_days: 365
+    backup_source: sec_form4_congress
+    min_track_record_trades: 10
+    source: quiverquant_free
+    track_committees:
+    - Financial Services
+    - Armed Services
+    - Energy and Commerce
+    - Agriculture
+    - Science and Technology
+  earnings_quality:
+    beat_quality_categories:
+    - REVENUE_DRIVEN
+    - MARGIN_DRIVEN
+    - COST_CUT
+    - TAX_DRIVEN
+    - ONE_OFF
+    cash_flow_confirmation_weight: 0.3
+    guidance_weight: 0.4
+    revenue_vs_earnings_weight: 0.6
+  enabled: true
+  factors:
+    custom_factors:
+    - earnings_quality_factor
+    - altdata_composite_factor
+    - supply_chain_stress_factor
+    - congressional_smart_money_factor
+    standard_factors:
+    - momentum
+    - value
+    - quality
+    - size
+    - volatility
+    - profitability
+    - investment
+    update_frequency: weekly
+  log_path: logs/deepdata.log
+  microstructure:
+    execution_window_minutes: 30
+    liquidity_threshold_pct_adv: 0.05
+    market_impact_model: square_root
+    spread_data_source: yfinance_bid_ask
+    vwap_slippage_model: true
+  model_path: deepdata/models/
+  options:
+    primary_market: US
+    scan_interval_minutes: 30
+    secondary_market: UK
+    track_metrics:
+    - put_call_ratio
+    - implied_volatility_rank
+    - unusual_volume_score
+    - smart_money_flow_index
+    - gamma_exposure
+    - dark_pool_prints
+    uk_confidence_weight: 0.6
+    uk_source: lse_public
+    unusual_threshold_percentile: 95
+    us_confidence_weight: 1.0
+    us_source: cboe_free
+  patents:
+    lead_time_days: 180
+    track_metrics:
+    - filing_velocity
+    - citation_growth
+    - competitor_overlap
+    - technology_category_shift
+    uk_source: uk_ipo_api
+    us_source: uspto_api
+  patterns:
+    cross_module_scan: true
+    min_observations: 30
+    nonsense_threshold: 0.05
+    test_combinations:
+    - - options_flow
+      - short_interest
+      - congressional
+    - - transcript_tone
+      - patent_velocity
+      - supply_chain
+    - - lunar_phase
+      - options_gamma
+      - reddit_sentiment
+    - - weather
+      - short_squeeze
+      - earnings_quality
+    - - congressional_committee
+      - patent_filing
+      - hiring_momentum
+  short_interest:
+    prediction:
+      lookback_days: 252
+      min_historical_squeezes: 5
+      nonsense_patterns: true
+      pattern_scan: true
+    source: finra
+    squeeze_thresholds:
+      borrow_rate_high: 0.3
+      days_to_cover_high: 10
+      short_float_pct_flag: 0.2
+    update_frequency: biweekly
+  storage_path: deepdata/storage/deepdata.db
+  supply_chain:
+    readthrough_decay: 0.7
+    relationship_depth: 3
+    risk_propagation: true
+    source: sec_10k_supplier_disclosures
+    update_frequency: quarterly
+  transcripts:
+    finbert_enabled: true
+    linguistic_features:
+    - hedge_word_count
+    - certainty_word_count
+    - negative_word_ratio
+    - question_deflection_rate
+    - prepared_vs_qa_tone_shift
+    - management_interruption_count
+    - analyst_pushback_score
+    - forward_word_ratio
+    - we_vs_i_ratio
+    - passive_voice_ratio
+    sources:
+    - sec_edgar_8k
+    - motley_fool_free
+    - seeking_alpha_free
+    tone_shift_threshold: 0.15
+filters:
+  earnings_quality: true
+  news_lookback_hours: 48
+  sector_contagion_check: true
+  sentiment_check: true
+  short_availability_check: true
+frontier:
+  complexity_index:
+    altdata_weight: 0.15
+    enabled: true
+    financial_weight: 0.25
+    physical_weight: 0.2
+    scientific_weight: 0.15
+    social_weight: 0.25
+    strategy_adjustments:
+      extreme:
+        halt_frontier_signals: true
+        position_size_multiplier: 0.3
+        preferred_strategy: defensive
+        threshold: 95
+      high:
+        position_size_multiplier: 0.65
+        preferred_strategy: mean_reversion
+        threshold: 80
+      low:
+        position_size_multiplier: 1.0
+        preferred_strategy: momentum
+        threshold: 30
+      medium:
+        position_size_multiplier: 0.85
+        preferred_strategy: balanced
+        threshold: 60
+  discovery:
+    always_flag_for_review: true
+    auto_validate: true
+    log_permanently: true
+    promote_if_passes_validation: false
+    review_frequency: weekly
+    watchlist_size: 10
+  enabled: true
+  financial_frontier:
+    building_permits:
+      lead_time_months: 18
+      postcode_level: true
+      uk_source: planning_portal_free
+      us_source: census_building_permits_free
+    llm_perplexity:
+      baseline_window_documents: 20
+      model: gpt2
+      perplexity_spike_threshold: 2.0
+      track_document_types:
+      - sec_8k
+      - earnings_releases
+      - press_releases
+      - ceo_letters
+    option_expiry_overhang:
+      gamma_threshold: 0.3
+      overhang_window_days: 5
+      small_cap_amplifier: 1.5
+  log_everything_permanently: true
+  log_path: logs/frontier.log
+  parameter_drifting:
+    anchor_to_published: true
+    drift_rate: 0.01
+    enabled: true
+    max_drift_from_published: 0.3
+    min_observations_before_drift: 100
+  physical:
+    canal_congestion:
+      lead_time_weeks: 3
+      sources:
+        bosphorus: turkey_public_data
+        panama: panama_canal_authority_free
+        suez: marinetraffic_free_tier
+    electricity:
+      track_industrial_vs_residential_ratio: true
+      uk_source: national_grid_eso_free
+      uk_url: https://api.nationalgrideso.com/dataset
+      us_source: eia_free
+      us_url: https://api.eia.gov/v2/electricity
+    geomagnetic:
+      geographic_weights:
+        edinburgh: 1.3
+        london: 1.2
+        new_york: 1.0
+      published_effect_bps: 3
+      published_mechanism: mood_risk_appetite
+      source: noaa_free
+      track_dst_index: true
+      track_kp_index: true
+      track_solar_wind: true
+      url: https://services.swpc.noaa.gov/json/planetary_k_index_1m.json
+    pollen:
+      affected_sectors:
+        outdoor_leisure: -0.5
+        pharma: 0.4
+        retail: -0.3
+        transport: -0.2
+      seasonal_baseline: true
+      source: openmeteo_free
+      url: https://air-quality-api.open-meteo.com/v1/air-quality
+    satellite:
+      processing: car_count_proxy_via_pixel_density
+      resolution_days: 10
+      source: sentinel_esa_free
+      target_location_types:
+      - retail_car_parks
+      - industrial_sites
+      - hq_buildings
+    schumann:
+      published_effect: speculative
+      sources:
+      - tomsk_university_free
+      - heartmath_institute_free
+      track_amplitude: true
+      track_frequency_deviation: true
+  scientific:
+    academic_citations:
+      citation_velocity_window_days: 90
+      commercialisation_lead_years: 3
+      source: semantic_scholar_free
+      track_fields:
+      - materials_science
+      - biotechnology
+      - computer_science
+      - quantum_computing
+      - antimicrobial_resistance
+      - renewable_energy
+      url: https://api.semanticscholar.org/graph/v1
+    amr_research:
+      affected_sectors:
+      - pharmaceuticals
+      - diagnostics
+      - hospital_equipment
+      sources:
+      - pubmed_free
+      - who_reports_free
+      - cdc_data_free
+      urgency_escalation_threshold: 0.2
+    food_safety:
+      recall_prediction_window_days: 90
+      uk_source: food_standards_agency_free
+      us_source: fda_inspections_free
+      violation_severity_weights:
+        critical: 1.0
+        major: 0.6
+        minor: 0.2
+    quantum_readiness:
+      opportunity_sectors:
+      - quantum_hardware
+      - quantum_software
+      - materials_science
+      paper_source: arxiv_free
+      patent_source: uspto_free
+      threat_sectors:
+      - cybersecurity
+      - financial_services
+      - communications
+      track_organisations: true
+    soil_health:
+      affected_sectors:
+      - agriculture
+      - fertilisers
+      - food_manufacturing
+      lead_time_years: 3
+      source: usda_nrcs_free
+      url: https://sdmdataaccess.sc.egov.usda.gov
+  sizing:
+    auto_promote: true
+    promote_check_frequency_days: 30
+    tier_1_evidence:
+      description: passes full validation + 6 months live track record
+      max_position_pct_of_normal: 1.0
+    tier_2_evidence:
+      description: passes full validation, 3-6 months live
+      max_position_pct_of_normal: 0.5
+    tier_3_evidence:
+      description: passes full validation, 0-3 months live
+      max_position_pct_of_normal: 0.25
+    tier_4_evidence:
+      description: passes backtesting only, no live track record
+      max_position_pct_of_normal: 0.1
+    tier_5_evidence:
+      description: monitoring only, insufficient data
+      max_position_pct_of_normal: 0.0
+  social:
+    attention_economy:
+      lookback_hours: 48
+      news_concentration_threshold: 0.8
+      reversion_window_days: 10
+    church_attendance:
+      lead_time_quarters: 2
+      regional_mapping: true
+      source: pew_research_annual
+    divorce_filings:
+      affected_sectors:
+      - consumer_discretionary
+      - home_furnishings
+      - legal_services
+      - financial_services
+      lead_time_months: 6
+      uk_source: hmcts_statistics_free
+      us_source: state_court_records_public
+    hq_traffic:
+      alert_threshold_pct_drop: 0.3
+      baseline_window_weeks: 8
+      source: google_popular_times_scrape
+    obituary:
+      drift_window_days: 60
+      match_to_universe: true
+      sources:
+      - legacy_com_rss
+      - findagrave_rss
+      - sec_8k_leadership_changes
+    social_contagion:
+      cascade_detection: true
+      influence_decay: 0.85
+      network_source: twitter_public_graphs
+  storage_path: frontier/storage/frontier.db
+  validation:
+    bonferroni: true
+    deflated_sharpe: true
+    min_observations: 30
+    min_sharpe_backtest: 0.5
+    monte_carlo_permutations: 1000
+    regime_stability_required: true
+    t_test: true
+markets:
+  uk:
+    avg_daily_volume_min: 50000
+    enabled: true
+    exchanges:
+    - LSE
+    market_cap_max_gbp: 1500000000
+    market_cap_min_gbp: 30000000
+    min_price_gbp: 0.5
+    price_divisor: 100
+    suffix: .L
+  us:
+    avg_daily_volume_min: 100000
+    enabled: true
+    exchanges:
+    - NYSE
+    - NASDAQ
+    market_cap_max_usd: 2000000000
+    market_cap_min_usd: 50000000
+    min_price_usd: 1.0
+notifications:
+  log: true
+  telegram:
+    bot_token: ''
+    chat_id: ''
+    enabled: false
+  terminal: true
+paper_trading:
+  email_alerts: false
+  log_to_file: true
+  scan_time_uk: 08:15
+  scan_time_us: 09:45
+  min_confidence: 0.25
+  observation_mode: false
+  signal_thresholds:
+    min_combined_score: 0.25
+    pead_min_surprise: 0.02
+    momentum_min_score: 0.15
+    mean_reversion_min_score: 0.15
+    gap_min_score: 0.15
+  adaptive_sizing:
+    enabled: true
+    phase1_base_pct: 0.0015
+    phase1_max_pct: 0.004
+    phase1_max_positions: 200
+    phase2_base_pct: 0.003
+    phase2_max_pct: 0.008
+    phase2_max_positions: 150
+    phase3_base_pct: 0.005
+    phase3_max_pct: 0.012
+    phase3_max_positions: 120
+    phase4_base_pct: 0.007
+    phase4_max_pct: 0.018
+    phase4_max_positions: 100
+    phase5_base_pct: 0.010
+    phase5_max_pct: 0.025
+    phase5_max_positions: 75
+    never_exceed_pct: 0.030
+    account_halt_pct: 0.15
+  bot:
+    auto_restart: true
+    log_all_signals: true
+    log_all_contexts: true
+    data_collection_interval_minutes: 30
+risk:
+  atr_stop_multiplier: 2.0
+  correlation_limit: 0.75
+  execution_window_minutes: 30
+  kelly_fraction: 0.5
+  max_drawdown_halt_pct: 0.15
+  max_market_exposure_pct: 0.6
+  max_position_pct: 0.05
+  max_sector_exposure_pct: 0.25
+  max_total_positions: 150
+  vwap_execution: true
+signal:
+  anomaly:
+    auto_promote: false
+    max_correlation_to_existing: 0.3
+    min_observations: 50
+    min_sharpe: 1.0
+    validation_required: true
+  pead:
+    earnings_surprise_threshold: 0.08
+    holding_period_days: 20
+    lookback_days: 504
+    volume_surge_multiplier: 1.3
+    zscore_window: 60
+universe:
+  auto_refresh_days: 30
+  context_tiers:
+  - 3
+  global_context_enabled: true
+  max_primary_universe: 2000
+  max_secondary_universe: 1000
+  primary_tiers:
+  - 1
+  secondary_tiers:
+  - 2
+  uk_enabled: true
+  scan_tiers: all
+  max_universe_size: 5000
+  include_large_caps: true
+  include_uk: true
+  include_micro: true
+  auto_rebuild_weekly: true

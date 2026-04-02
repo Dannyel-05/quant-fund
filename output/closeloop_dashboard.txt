@@ -1,0 +1,98 @@
+======================================================================
+  CLOSED-LOOP FUND DASHBOARD   2026-03-30 19:58:34 UTC
+======================================================================
+
+--- 1. STORE STATUS --------------------------------------------------
+  db_path                            : closeloop_data.db
+  trades                             :      0 rows
+  attributed                         :      0 rows
+  weights                            :      0 rows
+  drawdowns                          :      0 rows
+  stress_runs                        :      2 rows
+  tax_records                        :      0 rows
+  benchmark_days                     :      0 rows
+  overall_win_rate                   : 0.0
+
+--- 2. SIGNAL WEIGHTS ------------------------------------------------
+  No signal weights recorded yet
+
+--- 3. RECENT TRADES (last 10) ---------------------------------------
+  No trades recorded yet
+
+--- 4. PnL ATTRIBUTION -----------------------------------------------
+  No attribution data yet
+
+--- 5. REGIME --------------------------------------------------------
+  VIX regime      : HIGH
+  Macro regime    : RISK_OFF
+  VIX             : N/A
+
+--- 6. ENTRY QUALITY -------------------------------------------------
+  No entry timing outcomes yet
+
+--- 7. SCALE-IN STATUS -----------------------------------------------
+  Scale-in: 3-tranche (33%/33%/34%)
+  Abort logic: connected via ModuleWirer #8
+
+--- 8. PEER INFLUENCE ------------------------------------------------
+  No peer influence outcomes yet
+
+--- 9. ANALYST REVISIONS ---------------------------------------------
+  No analyst revision outcomes yet
+
+--- 10. ACADEMIC TAILWIND --------------------------------------------
+  AcademicFundamentalBridge: available
+
+--- 11. DRAWDOWN FORENSICS -------------------------------------------
+  No drawdown events recorded
+
+--- 12. STRESS TEST --------------------------------------------------
+  WeightedStressRisk : 0.0000  ░░░░░░░░░░░░░░░░░░░░
+  CrisisFragile      : NO
+  Scenarios evaluated: 20
+  Top scenario: great_depression_1929 (relevance=0.000)
+
+--- 13. CORRELATION REGIME -------------------------------------------
+  CorrelationRegimeDetector: available
+  Run: closeloop correlation (live data needed)
+
+--- 14. MARKET IMPACT MODEL ------------------------------------------
+  MarketImpactModel: available
+  η(US)=0.15  η(UK)=0.20  Impact=η·σ·√(Q/V)
+
+--- 15. TAX SUMMARY --------------------------------------------------
+  Net gain (YTD)     : £0.00
+  CGT allowance      : £3000
+  Taxable gain       : £0.00
+  Est. tax (higher)  : £0.00
+
+--- 16. BENCHMARK COMPARISON -----------------------------------------
+BENCHMARK COMPARISON
+==================================================
+  SPY   (US Large Cap   ): IR=+0.000  [NEGATIVE]  n=0
+  IWM   (US Small Cap   ): IR=+0.000  [NEGATIVE]  n=0
+  EWU   (UK Equity      ): IR=+0.000  [NEGATIVE]  n=0
+  ACWI  (Global         ): IR=+0.000  [NEGATIVE]  n=0
+
+--- 17. MODULE WIRING ------------------------------------------------
+  Wired: 12/12
+    [OK] # 1 PEAD signal doesn't use analyst revision modifier
+    [OK] # 2 Risk manager doesn't check market impact before si
+    [OK] # 3 Paper trader doesn't record trades to closeloop st
+    [OK] # 4 Backtest engine doesn't run stress test on complet
+    [OK] # 5 Frontier signals don't feed UMCI into position siz
+    [OK] # 6 No peer influence context on PEAD entries
+    [OK] # 7 Entry timer not integrated with paper trader scan
+    [OK] # 8 Scale-in manager not connected to broker
+    [OK] # 9 Weight updater not called after trade close
+    [OK] #10 Tax manager not recording UK disposals
+    [OK] #11 Benchmark tracker not updated daily
+    [OK] #12 Stress learner not receiving trade outcomes
+
+--- 18. SIGNAL INTERACTIONS ------------------------------------------
+  No signal interaction data yet
+
+--- 19. WEIGHT HISTORY (last 5 changes) ------------------------------
+  No weight history yet
+
+======================================================================

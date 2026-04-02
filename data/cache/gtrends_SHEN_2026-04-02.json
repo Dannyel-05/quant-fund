@@ -1,0 +1,19 @@
+{
+  "source": "google_trends",
+  "ticker": "SHEN",
+  "market": "us",
+  "data_type": "google_interest",
+  "value": -0.05295032432692119,
+  "raw_data": {
+    "company_name": "Shenandoah Telecommunications Company",
+    "geo": "US",
+    "last_value": 0.0,
+    "ma_4w": 0.0,
+    "ma_12w": 0.0,
+    "z_score": -0.10599978800063602,
+    "trend_direction": 0.0,
+    "n_points": 91
+  },
+  "timestamp": "2026-04-02T08:14:18.853036",
+  "quality_score": 0.855
+}

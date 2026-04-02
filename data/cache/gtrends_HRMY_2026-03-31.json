@@ -1,0 +1,12 @@
+{
+  "source": "google_trends",
+  "ticker": "HRMY",
+  "market": "us",
+  "data_type": "google_interest",
+  "value": 0.0,
+  "raw_data": {
+    "error": "empty_response"
+  },
+  "timestamp": "2026-03-31T20:35:34.099353",
+  "quality_score": 0.3
+}

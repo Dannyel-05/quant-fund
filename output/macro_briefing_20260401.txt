@@ -1,0 +1,44 @@
+================================
+MACRO BRIEFING — 2026-04-01 23:37
+================================
+
+MARKET REGIME: RISK_ON (N/A% confidence)
+Strategy adjustment: 1.00x position sizes
+
+OVERNIGHT DEVELOPMENTS:
+  - Amazon Big Spring Sale: Last chance for 150+ best-ever prices on Apple, Sony headphones, more - Mashable
+  - Stock Market Today: Dow Spikes 1,000 Points Amid Powerful Turnaround; These Drug Names Surge (Live Coverage) - Investor's Business Daily
+  - Attack on axios software developer tool threatens widespread compromises - CyberScoop
+  - OpenAI raises $122 billion to accelerate the next phase of AI - OpenAI
+  - Meta was finally held accountable for harming teens. Now what? - TechCrunch
+
+SHIPPING STATUS:
+  Baltic Dry Index: 10.3 (PROXY) (+3.2% 1-week change)
+  Shipping Stress Index: NEUTRAL
+  Sector impact: SSI=1.35 — Importers/retailers at risk if SSI>1.5
+
+WEATHER ALERTS:
+  NONE
+
+INTEREST RATES:
+  10yr yield: 4.30%
+  2yr yield:  3.79%
+  Yield curve: +51bps — NORMAL
+  Credit spreads HY: 328bps (NORMAL)
+  Fed next meeting: 2026-05-06 — 35 days away
+
+CONSUMER HEALTH:
+  Consumer confidence: 56.6 vs N/A (SERIES_NOT_FOUND)
+  Jobless claims: 210,000 vs N/A
+  Overall: WEAK
+
+GEOPOLITICAL:
+  Active alerts:   NONE
+  Conflict level: LOW
+
+TODAY'S TRADING GUIDANCE:
+  Sectors to FAVOUR: Technology, Consumer Discretionary, Industrials
+  Sectors to AVOID:  Defensive Utilities, Long Duration Bonds
+  Position sizing: 100% of normal (regime adjustment)
+
+================================
