@@ -851,6 +851,135 @@ def cmd_status(config: dict) -> None:
     print("=" * 66 + "\n")
 
 
+def cmd_reports(config: dict, args) -> None:
+    """Handle all 'reports' sub-commands."""
+    import glob, os
+    from datetime import datetime, timedelta
+    from pathlib import Path
+
+    subcmd = args.reports_command
+
+    if subcmd == "list":
+        print("\n" + "=" * 60)
+        print("  QUANT FUND SAVED REPORTS")
+        print("=" * 60)
+        for label, pattern in [
+            ("Daily Health Reports",  "logs/daily_health_reports/health_report_*.txt"),
+            ("Weekly Reports",        "logs/weekly_reports/weekly_report_*.txt"),
+            ("Diagnostics",           "logs/diagnostics/diagnostic_*.txt"),
+            ("Alert Files",           "logs/alerts/alert_*.txt"),
+        ]:
+            files = sorted(glob.glob(pattern), reverse=True)
+            print(f"\n{label} ({len(files)}):")
+            for f in files[:10]:
+                size = os.path.getsize(f) // 1024
+                print(f"  {f}  ({size}KB)")
+            if len(files) > 10:
+                print(f"  ... and {len(files)-10} more")
+        # Telegram history
+        tg_files = sorted(
+            glob.glob("output/telegram_history/telegram_log_*.json"), reverse=True
+        )
+        total_msgs = 0
+        for fp in tg_files:
+            try:
+                total_msgs += len(Path(fp).read_text().strip().splitlines())
+            except Exception:
+                pass
+        print(f"\nTelegram History ({len(tg_files)} monthly files, ~{total_msgs} messages total):")
+        for f in tg_files[:5]:
+            print(f"  {f}")
+        print()
+
+    elif subcmd == "show":
+        which = args.which
+        if which == "today":
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            path = Path(f"logs/daily_health_reports/health_report_{date_str}.txt")
+            if path.exists():
+                print(path.read_text(encoding="utf-8"))
+            else:
+                print(f"No report for today ({date_str}) yet.")
+                print("Generate one now with: python3 main.py reports send_daily")
+        elif which == "weekly":
+            now  = datetime.now()
+            week = now.isocalendar()
+            path = Path(f"logs/weekly_reports/weekly_report_{week[0]}-W{week[1]:02d}.txt")
+            if path.exists():
+                print(path.read_text(encoding="utf-8"))
+            else:
+                print(f"No weekly report for W{week[1]:02d}/{week[0]} yet.")
+                print("It will be auto-generated on Sunday at 6am UTC.")
+        elif which == "diagnostic":
+            files = sorted(glob.glob("logs/diagnostics/diagnostic_*.txt"), reverse=True)[:6]
+            if not files:
+                print("No diagnostics yet. Run: python3 main.py reports diagnose")
+            for f in files:
+                print(f"\n{'='*60}")
+                print(f"  {f}")
+                print('='*60)
+                print(Path(f).read_text(encoding="utf-8"))
+
+    elif subcmd == "telegram":
+        from monitoring.telegram_logger import get_recent
+        msgs = get_recent(10)
+        print("\n" + "=" * 60)
+        print("  LAST 10 TELEGRAM MESSAGES SENT")
+        print("=" * 60)
+        if not msgs:
+            print("  No messages logged yet.")
+        for m in msgs:
+            ts   = m.get("timestamp", "?")[:19]
+            mtype = m.get("type", "?")
+            deliv = "✅" if m.get("delivered") else "❌"
+            text  = m.get("message", "")[:120].replace("\n", " ")
+            print(f"\n  [{ts}] {deliv} [{mtype}]")
+            print(f"  {text}...")
+        print()
+
+    elif subcmd == "alerts":
+        files = sorted(glob.glob("logs/alerts/alert_*.txt"), reverse=True)
+        cutoff = datetime.now() - timedelta(days=7)
+        recent = []
+        for f in files:
+            try:
+                mtime = datetime.fromtimestamp(os.path.getmtime(f))
+                if mtime >= cutoff:
+                    recent.append((mtime, f))
+            except Exception:
+                pass
+        print(f"\n{'='*60}")
+        print(f"  ALERTS — LAST 7 DAYS ({len(recent)} files)")
+        print("=" * 60)
+        if not recent:
+            print("  No alerts in the last 7 days. 🎉")
+        for mtime, f in sorted(recent, reverse=True)[:20]:
+            print(f"\n  [{mtime.strftime('%Y-%m-%d %H:%M')}] {f}")
+            try:
+                content = Path(f).read_text(encoding="utf-8")[:300]
+                print("  " + content.replace("\n", "\n  "))
+            except Exception:
+                pass
+        print()
+
+    elif subcmd == "send_daily":
+        print("Generating and sending daily health report...")
+        from monitoring.health_reporter import send_daily_report
+        ok = send_daily_report(config)
+        print(f"Sent: {ok}")
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        print(f"Saved: logs/daily_health_reports/health_report_{date_str}.txt")
+
+    elif subcmd == "diagnose":
+        print("Running self-diagnostic...")
+        from monitoring.self_diagnostic import run_diagnostic
+        result = run_diagnostic(config)
+        print(f"\nResult: {'ALL PASSED ✅' if result['passed'] else 'FAILURES DETECTED 🚨'}")
+        for name, ok, detail in result["results"]:
+            icon = "✅" if ok else "❌"
+            print(f"  {icon} {name}" + (f": {detail}" if not ok else ""))
+        print(f"\nSaved to: {result.get('path', '?')}")
+
 
 def cmd_altdata_collect(config: dict, tickers: list = None) -> None:
     """Run all alt-data collectors for the given tickers."""
@@ -2882,6 +3011,18 @@ def main() -> None:
     p_eq.add_argument("--status", action="store_true", help="Show equation database status")
     p_eq.add_argument("--tickers", type=int, default=50, help="Max tickers to use (default 50)")
 
+    # --- reports ---
+    p_rep = sub.add_parser("reports", help="Health reports, alerts and Telegram history")
+    rep_sub = p_rep.add_subparsers(dest="reports_command", required=True)
+    rep_sub.add_parser("list",       help="Show all saved reports with dates and types")
+    p_rshow = rep_sub.add_parser("show", help="Print a specific report (today/weekly/diagnostic)")
+    p_rshow.add_argument("which", choices=["today", "weekly", "diagnostic"],
+                         help="today=daily health, weekly=weekly suggestion, diagnostic=last 6 diagnostics")
+    rep_sub.add_parser("telegram",   help="Show last 10 Telegram messages sent")
+    rep_sub.add_parser("alerts",     help="Show all instant alerts from last 7 days")
+    rep_sub.add_parser("send_daily", help="Trigger and send today's daily health report now")
+    rep_sub.add_parser("diagnose",   help="Run self-diagnostic immediately and print result")
+
     args = parser.parse_args()
     config = load_config()
 
@@ -2917,6 +3058,9 @@ def main() -> None:
 
     elif args.command == "status":
         cmd_status(config)
+
+    elif args.command == "reports":
+        cmd_reports(config, args)
 
     elif args.command == "validate":
         cmd_validate(config)

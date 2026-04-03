@@ -92,6 +92,14 @@ class TradingBot:
         except Exception as _e:
             logger.warning('AlpacaStream start failed: %s', _e)
 
+        # ── Self-monitoring and health reporting ───────────────────────
+        self.monitor_runner = None
+        try:
+            from monitoring.monitor_runner import start_monitoring
+            self.monitor_runner = start_monitoring(config, self.stream_worker)
+        except Exception as _e:
+            logger.warning('MonitorRunner start failed: %s', _e)
+
         # ── State tracking ────────────────────────────────────────────
         self.last_uk_scan: Optional[datetime] = None
         self.last_us_scan: Optional[datetime] = None
@@ -235,6 +243,17 @@ class TradingBot:
                     collected[name] = 0
             except Exception as e:
                 collected[name] = f'ERR:{str(e)[:30]}'
+                try:
+                    from monitoring.alert_monitor import check_collector_failures
+                    check_collector_failures(self.config, name, str(e)[:120])
+                except Exception:
+                    pass
+            else:
+                try:
+                    from monitoring.alert_monitor import reset_collector_ok
+                    reset_collector_ok(name)
+                except Exception:
+                    pass
 
         # ── Article collection for signal tickers ────────────────────
         articles_fetched = 0

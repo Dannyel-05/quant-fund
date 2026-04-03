@@ -1,1 +1,1 @@
-# monitoring package
+"Quant-fund self-monitoring, health reporting and alerting system."
