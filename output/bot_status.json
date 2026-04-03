@@ -1,14 +1,16 @@
 {
-  "status": "STARTING",
-  "timestamp": "2026-04-02T23:31:28.686312",
+  "status": "RUNNING",
+  "timestamp": "2026-04-03T18:47:18.542882",
   "running": true,
   "paused": false,
-  "scan_count": 0,
+  "scan_count": 5,
   "errors_today": 0,
   "articles_fetched_today": 0,
-  "last_uk_scan": null,
-  "last_us_scan": null,
-  "last_data_collection": null,
-  "phase": "PHASE_3 | 489 trades | 0.50%\u20131.20% per position | max 120 positions | 111 trades to next phase",
-  "use_alpaca": true
+  "last_uk_scan": "2026-04-03T17:21:53.149235",
+  "last_us_scan": "2026-04-03T18:47:18.532846",
+  "last_data_collection": "2026-04-03T17:42:55.532172",
+  "phase": "PHASE_3 | 523 trades | 0.50%\u20131.20% per position | max 120 positions | 77 trades to next phase",
+  "use_alpaca": true,
+  "last_scan_market": "US",
+  "last_scan_positions_opened": 10
 }

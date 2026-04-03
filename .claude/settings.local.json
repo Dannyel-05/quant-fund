@@ -59,7 +59,15 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(head -10 find . -name fetcher.py -not -path ./.git/*)",
       "Bash(head -20 grep -n \"yf\\\\.Ticker\\\\|fast_info\" execution/paper_trader.py)",
-      "Bash(grep -n \"yf\\\\.Ticker\\\\|yf\\\\.download\" signals/*.py)"
+      "Bash(grep -n \"yf\\\\.Ticker\\\\|yf\\\\.download\" signals/*.py)",
+      "Bash(head -30 grep -n \"class\\\\|def collect\\\\|def __init__\" /home/dannyelticala/quant-fund/deepdata/supply_chain/supply_chain_collector.py)",
+      "Bash(head -20 grep -n \"def collect\\\\|class\\\\|__init__\" /home/dannyelticala/quant-fund/deepdata/supply_chain/relationship_mapper.py)",
+      "Bash(source venv/bin/activate)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(find /home/dannyelticala/quant-fund -path ./venv -prune -o -name *closeloop*engine* -type f -print)",
+      "Bash(grep:*)",
+      "Bash(find /home/dannyelticala/quant-fund -path ./venv -prune -o -name \"*.py\" -type f -exec grep -l \"class.*CloseLoop.*Engine\\\\|class.*Engine.*CloseLoop\" {})"
     ]
   }
 }

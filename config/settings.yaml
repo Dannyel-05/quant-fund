@@ -680,9 +680,9 @@ markets:
 notifications:
   log: true
   telegram:
-    bot_token: ''
-    chat_id: ''
-    enabled: false
+    bot_token: '8789592090:AAH_b0ShTnKLQT2a3IBOBHkNGucC0ZTBnv0'
+    chat_id: '8508697534'
+    enabled: true
   terminal: true
 paper_trading:
   email_alerts: false
@@ -750,15 +750,15 @@ universe:
   context_tiers:
   - 3
   global_context_enabled: true
-  max_primary_universe: 2000
-  max_secondary_universe: 1000
+  max_primary_universe: 5000
+  max_secondary_universe: 3000
   primary_tiers:
   - 1
   secondary_tiers:
   - 2
   uk_enabled: true
   scan_tiers: all
-  max_universe_size: 5000
+  max_universe_size: 10000
   include_large_caps: true
   include_uk: true
   include_micro: true
