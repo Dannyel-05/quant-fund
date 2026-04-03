@@ -351,6 +351,38 @@ class PaperTrader:
         self.run_scan(market="uk")
 
     # ------------------------------------------------------------------
+    # Real-time price helper (stream cache → yfinance fallback)
+    # ------------------------------------------------------------------
+
+    def _get_live_price(self, ticker: str,
+                        fallback: Optional[float] = None) -> Optional[float]:
+        """
+        Return the current price for *ticker*.
+
+        1. Tries the Alpaca real-time stream cache (stale threshold: 5 min).
+        2. Falls back to yf.Ticker.fast_info.last_price if cache miss / stale.
+        3. Returns *fallback* if both fail.
+
+        UK tickers (.L) always use yfinance — they are not streamed.
+        """
+        if not ticker.endswith(".L"):
+            try:
+                from execution.alpaca_stream import get_stream_cache
+                cached = get_stream_cache().get_fresh_price(ticker)
+                if cached:
+                    return cached
+            except Exception:
+                pass
+        # yfinance fallback
+        try:
+            price = yf.Ticker(ticker).fast_info.last_price
+            if price:
+                return float(price)
+        except Exception:
+            pass
+        return fallback
+
+    # ------------------------------------------------------------------
     # Public API (used by CLI and scheduler)
     # ------------------------------------------------------------------
 
@@ -537,7 +569,7 @@ class PaperTrader:
             entry = pos.get("entry_price", 0)
             direction = pos.get("direction", 1)
             try:
-                price = yf.Ticker(ticker).fast_info.last_price or entry
+                price = self._get_live_price(ticker, fallback=entry) or entry
                 pnl_pct = direction * (price - entry) / entry * 100 if entry else 0
                 days_held = (datetime.utcnow() - datetime.fromisoformat(
                     pos.get("entry_date", datetime.utcnow().isoformat())
@@ -805,6 +837,27 @@ class PaperTrader:
         confidence = float(signal.get("surprise_zscore", 0.0))
         min_confidence = self.pt.get("min_confidence", 1.0)
 
+        # ── Real-time signal boost ─────────────────────────────────────
+        # If the stream confirms the price is already moving in the same
+        # direction as our signal, boost confidence by up to +0.5.
+        try:
+            from execution.alpaca_stream import get_stream_cache
+            rt_move = get_stream_cache().get_move_pct(ticker, window_minutes=5)
+            if rt_move is not None:
+                # Signal aligned with real-time price direction → boost
+                if direction * rt_move > 2.0:
+                    boost = min(0.5, abs(rt_move) / 20.0)
+                    confidence += boost
+                    logger.debug(
+                        "RT boost: %s rt_move=%.2f%% boost=+%.3f → conf=%.3f",
+                        ticker, rt_move, boost, confidence,
+                    )
+                # Signal opposite to current real-time move → slight penalty
+                elif direction * rt_move < -3.0:
+                    confidence *= 0.85
+        except Exception:
+            pass
+
         # Skip if already in position
         if ticker in self.active:
             if self.active[ticker]["direction"] != direction:
@@ -832,13 +885,18 @@ class PaperTrader:
             logger.info("OBSERVED_NOT_TRADED: %s (confidence=%.3f < %.3f)", ticker, confidence, min_confidence)
             return obs_entry
 
-        # Use pre-fetched price if available (avoids per-ticker API call)
+        # Use pre-fetched price if available (avoids per-ticker API call).
+        # Real-time cache is checked as a secondary source when price_df is stale.
         try:
             if price_df is not None and not price_df.empty:
                 close_col = 'close' if 'close' in price_df.columns else price_df.columns[-1]
                 price = float(price_df[close_col].iloc[-1])
+                # Overlay with real-time cache if a fresher price exists
+                rt_price = self._get_live_price(ticker)
+                if rt_price:
+                    price = rt_price
             else:
-                price = yf.Ticker(ticker).fast_info.last_price
+                price = self._get_live_price(ticker)
             if not price:
                 return None
         except Exception:
@@ -1171,7 +1229,7 @@ class PaperTrader:
             pos = self.active[ticker]
 
             try:
-                price = yf.Ticker(ticker).fast_info.last_price
+                price = self._get_live_price(ticker)
                 if not price:
                     continue
             except Exception:
@@ -1253,7 +1311,7 @@ class PaperTrader:
             return
         try:
             if price is None:
-                price = yf.Ticker(ticker).fast_info.last_price
+                price = self._get_live_price(ticker)
             positions = self.broker.get_positions()
             if isinstance(positions, list):
                 # AlpacaPaperBroker returns a list of dicts with 'symbol' and 'qty'

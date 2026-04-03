@@ -79,6 +79,19 @@ class TradingBot:
         except Exception as e:
             logger.warning('DailyPipeline unavailable: %s', e)
 
+        # ── Real-time price stream (Alpaca websocket) ─────────────────
+        self.stream_worker = None
+        try:
+            from execution.alpaca_stream import start_stream
+            from data.universe import UniverseManager
+            from data.fetcher import DataFetcher
+            _fetcher = DataFetcher(config)
+            _um = UniverseManager(config, _fetcher)
+            _us_tickers = _um._default_tickers('us')
+            self.stream_worker = start_stream(config, _us_tickers)
+        except Exception as _e:
+            logger.warning('AlpacaStream start failed: %s', _e)
+
         # ── State tracking ────────────────────────────────────────────
         self.last_uk_scan: Optional[datetime] = None
         self.last_us_scan: Optional[datetime] = None
@@ -133,6 +146,12 @@ class TradingBot:
             phase_summary = 'unknown'
             if self.trader.sizer:
                 phase_summary = self.trader.sizer.get_phase_summary()
+            stream_stats = {}
+            try:
+                from execution.alpaca_stream import get_stream_cache
+                stream_stats = get_stream_cache().stats()
+            except Exception:
+                pass
             data = {
                 'status': status,
                 'timestamp': datetime.now().isoformat(),
@@ -146,6 +165,7 @@ class TradingBot:
                 'last_data_collection': self.last_data_collection.isoformat() if self.last_data_collection else None,
                 'phase': phase_summary,
                 'use_alpaca': self.trader.use_alpaca,
+                'stream': stream_stats,
             }
             if extra:
                 data.update(extra)
@@ -356,8 +376,10 @@ class TradingBot:
         print('TRADING BOT STARTING')
         print('=' * 60)
         sizer_summary = self.trader.sizer.get_phase_summary() if self.trader.sizer else 'no sizer'
+        stream_live = self.stream_worker is not None and self.stream_worker.is_alive()
         print(f'Phase:  {sizer_summary}')
         print(f'Alpaca: {"CONNECTED" if self.trader.use_alpaca else "SIMULATION"}')
+        print(f'Stream: {"LIVE (background thread)" if stream_live else "DISCONNECTED (using yfinance fallback)"}')
         print(f'Collectors: {len(self.collectors)} loaded')
         print(f'Press Ctrl+C to stop cleanly')
         print('=' * 60)

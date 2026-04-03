@@ -655,7 +655,7 @@ def cmd_report(config: dict, prefix: str) -> None:
 
 def cmd_status(config: dict) -> None:
     """Show system health: API keys, collectors, DB counts, upcoming earnings, health score."""
-    import sqlite3, os, time, requests
+    import json, sqlite3, os, time, requests
     log = logging.getLogger(__name__)
 
     print("\n" + "=" * 66)
@@ -774,8 +774,33 @@ def cmd_status(config: dict) -> None:
     except Exception as e:
         print(f"  ERROR reading altdata.db: {e}")
 
-    # ── 4. Upcoming earnings (next 7 days, sample from universe) ─────
-    print("\n[4] UPCOMING EARNINGS (next 7 days — sample 20 tickers)")
+    # ── 4. Real-time stream status ────────────────────────────────────
+    print("\n[4] REAL-TIME PRICE STREAM")
+    try:
+        stream_status = {}
+        bot_status_path = "output/bot_status.json"
+        if os.path.exists(bot_status_path):
+            with open(bot_status_path) as _f:
+                _bst = json.load(_f)
+                stream_status = _bst.get("stream", {})
+        connected      = stream_status.get("connected", False)
+        tickers_cached = stream_status.get("tickers_cached", 0)
+        total_updates  = stream_status.get("total_updates", 0)
+        spike_flags    = stream_status.get("spike_flags", 0)
+        last_update    = stream_status.get("last_update") or "never"
+        status_label   = "\033[92mLIVE\033[0m" if connected else "\033[91mDISCONNECTED\033[0m"
+        print(f"  Stream:       {status_label}")
+        print(f"  Tickers:      {tickers_cached} cached")
+        print(f"  Updates:      {total_updates:,} total")
+        print(f"  Spike flags:  {spike_flags} active")
+        print(f"  Last update:  {str(last_update)[:19]}")
+        if not connected:
+            print("  Fallback:     yfinance 15-min polling (normal when bot not running)")
+    except Exception as _e:
+        print(f"  Stream status unavailable: {_e}")
+
+    # ── 5. Upcoming earnings (next 7 days, sample from universe) ─────
+    print("\n[5] UPCOMING EARNINGS (next 7 days — sample 20 tickers)")
     try:
         import yfinance as yf
         from datetime import datetime, timedelta
@@ -811,7 +836,7 @@ def cmd_status(config: dict) -> None:
     except Exception as e:
         print(f"  ERROR: {e}")
 
-    # ── 5. Health Score ───────────────────────────────────────────────
+    # ── 6. Health Score ───────────────────────────────────────────────
     total_score = min(100, api_health_score + min(30, db_health_score) + min(10, collector_health // 10))
     print("\n" + "=" * 66)
     print(f"  HEALTH SCORE: {total_score}/100")
