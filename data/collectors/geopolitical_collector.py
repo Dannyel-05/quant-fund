@@ -594,8 +594,8 @@ class GeopoliticalCollector:
     Collects and aggregates geopolitical risk data from multiple sources.
     """
 
-    def __init__(self):
-        self._config = _load_config()
+    def __init__(self, config=None):
+        self._config = config if isinstance(config, dict) else _load_config()
         self._api_keys = self._config.get("api_keys", {})
         self._alerts: List[GeopoliticalAlert] = []
 

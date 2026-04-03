@@ -33,7 +33,7 @@ class BLSCollector:
         'CES3000000001': 'Manufacturing Employment',
     }
 
-    def __init__(self):
+    def __init__(self, config=None):
         os.makedirs('output', exist_ok=True)
         self._ensure_db()
 
@@ -142,7 +142,7 @@ class USASpendingCollector:
     BASE = 'https://api.usaspending.gov/api/v2'
     DB_PATH = 'output/permanent_archive.db'
 
-    def __init__(self):
+    def __init__(self, config=None):
         os.makedirs('output', exist_ok=True)
 
     def get_recent_all_awards(self, min_amount: float = 5_000_000) -> List[Dict]:

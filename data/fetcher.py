@@ -45,8 +45,16 @@ class DataFetcher:
                 if extracted is not None and not extracted.empty:
                     df = extracted
                 else:
-                    # Fall back: drop the ticker level and use whatever columns exist
-                    raw.columns = raw.columns.get_level_values(0)
+                    # Find the level that contains OHLCV field names and use it.
+                    # yfinance column order varies by version: (field, ticker) or (ticker, field).
+                    _ohlcv_fields = {'open', 'high', 'low', 'close', 'volume', 'adj close'}
+                    chosen_level = 0
+                    for _lvl in range(raw.columns.nlevels):
+                        _vals = {str(v).lower() for v in raw.columns.get_level_values(_lvl).unique()}
+                        if _vals & _ohlcv_fields:
+                            chosen_level = _lvl
+                            break
+                    raw.columns = raw.columns.get_level_values(chosen_level)
                     df = self._normalize_columns(raw)
             else:
                 df = self._normalize_columns(raw)

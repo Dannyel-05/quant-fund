@@ -241,7 +241,7 @@ class RatesCreditCollector:
     # Public API — main entry point
     # ------------------------------------------------------------------
 
-    def collect(self) -> Dict:
+    def collect(self, tickers=None, market=None, **kwargs) -> Dict:
         """
         Full data collection run:
           1. yfinance yield curve symbols (full history)

@@ -325,6 +325,9 @@ class ArticleReader:
 
     def fetch_article(self, url: str, ticker: str = "") -> Optional[Dict[str, Any]]:
         """Fetch, parse and store a single article. Returns metadata dict or None."""
+        # Skip Yahoo consent redirect pages
+        if "consent.yahoo.com" in url:
+            return None
         domain = self._extract_domain(url)
         html = self._fetch_with_archive_fallback(url)
         if not html:
@@ -336,6 +339,10 @@ class ArticleReader:
         author = parsed.get("author", "")
         date = parsed.get("date", "")
         body = parsed.get("body", "")
+
+        # Skip articles with insufficient content (consent pages, paywalls, etc.)
+        if len(body) < 100 and len(title) < 20:
+            return None
 
         article_id = self._store_article(url, title, author, date, body, domain, ticker)
         logger.info("Stored article id=%s title=%r domain=%s", article_id, title[:60], domain)
@@ -701,7 +708,7 @@ class AdvancedNewsIntelligence:
         try:
             url = (
                 f"https://newsapi.org/v2/everything"
-                f"?q={ticker}&sortBy=publishedAt&pageSize=10&apiKey={self.news_api_key}"
+                f"?q={ticker}&sortBy=publishedAt&pageSize=10&language=en&apiKey={self.news_api_key}"
             )
             resp = requests.get(url, timeout=15)
             data = resp.json()
@@ -737,6 +744,12 @@ class AdvancedNewsIntelligence:
             for art in api_articles:
                 url = art.get("url")
                 if not url:
+                    continue
+                # Skip Yahoo consent redirect pages — they contain no article content
+                if "consent.yahoo.com" in url:
+                    continue
+                # Skip if article language is explicitly non-English
+                if art.get("language") and art.get("language") != "en":
                     continue
                 try:
                     result = self.article_reader.fetch_article(url, ticker=ticker)

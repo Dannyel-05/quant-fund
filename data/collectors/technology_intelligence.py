@@ -539,8 +539,8 @@ class TechnologyIntelligence:
     Master orchestrator — runs all sub-collectors and stores to permanent DB.
     """
 
-    def __init__(self):
-        self.config = self._load_config()
+    def __init__(self, config=None):
+        self.config = config if isinstance(config, dict) else self._load_config()
         self.data_centre    = DataCentreIntelligence()
         self.semiconductor  = SemiconductorCycleTracker()
         self.ev             = EVAdoptionTracker()

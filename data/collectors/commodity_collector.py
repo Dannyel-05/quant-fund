@@ -482,8 +482,8 @@ class CommodityCollector:
     Comprehensive commodity data collection, storage, and signal generation.
     """
 
-    def __init__(self):
-        self._config = _load_config()
+    def __init__(self, config=None):
+        self._config = config if isinstance(config, dict) else _load_config()
         # In-memory cache: symbol -> list of price dicts (ascending date)
         self._price_cache: Dict[str, List[Dict[str, Any]]] = {}
         # Computed indicators cache: symbol -> dict

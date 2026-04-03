@@ -76,6 +76,10 @@ class SupplyChainRelationshipMapper:
             # Fallback: dict-based adjacency
             self._graph = {"nodes": {}, "edges": {}}
 
+    def collect(self, tickers: list, market: str = "us") -> list:
+        """Dispatch entry-point called by the deepdata runner. Returns edge list."""
+        return self.build_graph(tickers) or []
+
     def build_graph(self, tickers: list):
         """
         Build supply chain graph. Nodes=companies, edges=supplier->customer.

@@ -230,8 +230,13 @@ class UniverseManager:
         for ticker in tickers:
             try:
                 info = self.fetcher.fetch_ticker_info(ticker) or {}
+                # Skip delisted/404 tickers — yfinance returns an empty or near-empty
+                # dict with no usable fields when a ticker is no longer listed.
+                if not info or not any(info.get(k) for k in ("regularMarketPrice", "currentPrice", "previousClose", "averageVolume")):
+                    logger.debug("Universe: skipping %s (no data — likely delisted or 404)", ticker)
+                    continue
                 vol   = info.get("averageVolume") or 0
-                price = info.get("regularMarketPrice") or 0
+                price = info.get("regularMarketPrice") or info.get("currentPrice") or 0
                 if vol >= min_vol and price >= min_price:
                     passed.append(ticker)
             except Exception:

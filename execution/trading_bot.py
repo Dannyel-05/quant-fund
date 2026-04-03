@@ -298,9 +298,9 @@ class TradingBot:
             else:
                 self.last_us_scan = datetime.now()
 
-            # Summarise result for status/logging
-            opened = sum(1 for a in actions if a.get('type') == 'trade_open')
-            signal_tickers = list({a.get('ticker') for a in actions if a.get('ticker')})
+            # Summarise result for status/logging (guard against non-dict items)
+            opened = sum(1 for a in actions if isinstance(a, dict) and a.get('type') == 'trade_open')
+            signal_tickers = list({a.get('ticker') for a in actions if isinstance(a, dict) and a.get('ticker')})
             result = {'positions_opened': opened, 'signal_tickers': signal_tickers, 'total_actions': len(actions)}
 
             if signal_tickers:

@@ -349,8 +349,8 @@ class ConsumerIntelligence:
     Provides composite health indices for signal generation.
     """
 
-    def __init__(self):
-        self._config = _load_config()
+    def __init__(self, config=None):
+        self._config = config if isinstance(config, dict) else _load_config()
         self._fred_key: str = self._config.get("api_keys", {}).get("fred", "")
         self._series_cache: Dict[str, List[Tuple[str, float]]] = {}
         self._latest_cache: Dict[str, float] = {}
