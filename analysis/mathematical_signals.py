@@ -902,6 +902,156 @@ class KalmanPairsTrader:
 
 
 # ===========================================================================
+# WaveletSignal
+# ===========================================================================
+
+try:
+    import pywt as _pywt
+    PYWT_AVAILABLE = True
+except ImportError:
+    _pywt = None
+    PYWT_AVAILABLE = False
+    logger.warning("PyWavelets not installed — wavelet analysis unavailable")
+
+
+class WaveletSignal:
+    """
+    Multi-scale wavelet decomposition for financial price series.
+
+    Uses Daubechies db4 wavelet — empirically strong for financial time series.
+    Decomposes into 4 detail levels + approximation:
+      D1 (2-4 day)   : noise / microstructure
+      D2 (4-8 day)   : short swing noise
+      D3 (8-16 day)  : swing trading cycle <- primary trading signal
+      D4 (16-32 day) : medium-term momentum
+      A4 (32+ day)   : primary trend
+
+    Soft thresholding for denoising:
+      threshold = sigma * sqrt(2 * log(n))   (universal threshold)
+      where sigma = MAD / 0.6745  (robust noise estimate from D1 coefficients)
+
+    Returns:
+      dominant_period   : most energetic cycle in days
+      trend_direction   : +1 (up), -1 (down), 0 (flat) — from A4 slope
+      cycle_phase       : +1 (buy), -1 (sell), 0 (neutral) — from D3 local extrema
+      denoised_price    : soft-thresholded reconstruction
+      trend_strength    : A4 energy / total energy (0-1)
+      wavelet_score     : composite signal score (-1 to +1)
+    """
+
+    _WAVELET   = "db4"
+    _LEVELS    = 4
+    _D3_INDEX  = 2   # D3 is index 2 in detail coefficients (0=D1, 1=D2, 2=D3, 3=D4)
+
+    def __init__(self) -> None:
+        pass
+
+    def analyse(self, prices: np.ndarray) -> Dict[str, Any]:
+        """
+        Analyse a price series.
+        prices: 1-D numpy array, most recent last, minimum 32 points.
+        Returns result dict.
+        """
+        default = {
+            "dominant_period": None,
+            "trend_direction": 0,
+            "cycle_phase":     0,
+            "denoised_price":  float(prices[-1]) if len(prices) else 0.0,
+            "trend_strength":  0.5,
+            "wavelet_score":   0.0,
+        }
+
+        if not PYWT_AVAILABLE:
+            return default
+
+        prices = np.array(prices, dtype=float)
+        if len(prices) < 32:
+            return default
+
+        try:
+            # Decompose
+            coeffs = _pywt.wavedec(prices, self._WAVELET, level=self._LEVELS)
+            # coeffs = [cA4, cD4, cD3, cD2, cD1]  (approximation first, then details high->low freq)
+            cA4 = coeffs[0]
+            details = coeffs[1:]   # [cD4, cD3, cD2, cD1]
+
+            # ── Denoising ───────────────────────────────────────────────
+            # Noise estimate from finest detail (cD1 = coeffs[-1])
+            cD1 = coeffs[-1]
+            sigma = float(np.median(np.abs(cD1)) / 0.6745)
+            n     = len(prices)
+            threshold = sigma * np.sqrt(2 * np.log(max(n, 2)))
+
+            # Soft threshold all detail coefficients
+            denoised_coeffs = [cA4]
+            for d in details:
+                denoised_coeffs.append(_pywt.threshold(d, threshold, mode="soft"))
+
+            denoised_prices = _pywt.waverec(denoised_coeffs, self._WAVELET)
+            # waverec may return slightly different length — trim/pad
+            dn = denoised_prices[:len(prices)]
+            denoised_last = float(dn[-1]) if len(dn) else float(prices[-1])
+
+            # ── Trend from A4 ───────────────────────────────────────────
+            if len(cA4) >= 3:
+                trend_slope = float(cA4[-1] - cA4[-3])
+                trend_direction = 1 if trend_slope > 0 else (-1 if trend_slope < 0 else 0)
+            else:
+                trend_direction = 0
+
+            # Trend strength: A4 energy fraction
+            a4_energy    = float(np.sum(cA4 ** 2))
+            total_energy = a4_energy + sum(float(np.sum(d ** 2)) for d in details)
+            trend_strength = a4_energy / max(total_energy, 1e-10)
+
+            # ── Cycle phase from D3 (8-16 day swing) ───────────────────
+            # cD3 is index 2 from high->low: [cD4, cD3, cD2, cD1]
+            # Actually coeffs[1]=cD4, coeffs[2]=cD3 in wavedec with level=4
+            cD3 = coeffs[2] if len(coeffs) > 2 else np.array([0.0])
+
+            cycle_phase = 0
+            if len(cD3) >= 3:
+                last_d3 = float(cD3[-1])
+                prev_d3 = float(cD3[-2])
+                # Local minimum in D3 + positive trend -> buy
+                # Local maximum in D3 + negative trend -> sell
+                if last_d3 > prev_d3 and trend_direction >= 0:
+                    cycle_phase = 1   # rising from trough
+                elif last_d3 < prev_d3 and trend_direction <= 0:
+                    cycle_phase = -1  # falling from peak
+
+            # ── Dominant period ─────────────────────────────────────────
+            # Most energetic detail level
+            detail_energies = [float(np.sum(d ** 2)) for d in details]
+            if detail_energies:
+                strongest = int(np.argmax(detail_energies))
+                # Map index to approximate period range (days)
+                period_map = {0: 24, 1: 12, 2: 6, 3: 3}  # D4, D3, D2, D1 midpoints
+                dominant_period = period_map.get(strongest, 12)
+            else:
+                dominant_period = None
+
+            # ── Composite score ─────────────────────────────────────────
+            wavelet_score = float(np.clip(
+                0.6 * trend_direction + 0.4 * cycle_phase,
+                -1.0, 1.0
+            ))
+
+            return {
+                "dominant_period": dominant_period,
+                "trend_direction": trend_direction,
+                "cycle_phase":     cycle_phase,
+                "denoised_price":  denoised_last,
+                "trend_strength":  float(trend_strength),
+                "wavelet_score":   wavelet_score,
+            }
+
+        except Exception as exc:
+            logger.debug("WaveletSignal.analyse error: %s", exc)
+            return default
+
+
+# ===========================================================================
 # Standalone test
 # ===========================================================================
 
