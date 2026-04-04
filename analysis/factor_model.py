@@ -27,8 +27,20 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-_FF5_URL  = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip"
-_MOM_URL  = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_daily_CSV.zip"
+# FF5 daily — try daily first, fall back to all-frequency zip
+_FF5_URLS = [
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip",
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip",
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip",
+]
+# MOM daily
+_MOM_URLS = [
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_daily_CSV.zip",
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_CSV.zip",
+]
+# Keep old names as aliases (backward compat)
+_FF5_URL = _FF5_URLS[0]
+_MOM_URL = _MOM_URLS[0]
 _CACHE    = "data/cache/ff_factors.pkl"
 _MAX_CACHE_AGE_DAYS = 7
 
@@ -137,21 +149,40 @@ class FactorModelAnalyser:
             import requests
             sess = requests.Session()
 
+            def _fetch_zip_csv(urls: list) -> str:
+                """Try each URL; return decoded CSV text from the first CSV file inside the zip."""
+                last_exc = None
+                for url in urls:
+                    try:
+                        resp = sess.get(url, timeout=30)
+                        resp.raise_for_status()
+                        with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+                            # Case-insensitive search for CSV file
+                            csv_names = [n for n in z.namelist() if n.lower().endswith(".csv")]
+                            if not csv_names:
+                                continue
+                            return z.read(csv_names[0]).decode("utf-8", errors="ignore")
+                    except Exception as exc:
+                        last_exc = exc
+                        logger.debug("download_factors URL %s failed: %s", url, exc)
+                raise RuntimeError(f"All FF URLs failed. Last error: {last_exc}")
+
             # FF5 daily
-            r5 = sess.get(_FF5_URL, timeout=30)
-            r5.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(r5.content)) as z:
-                csv_name = [n for n in z.namelist() if n.endswith(".CSV")][0]
-                ff5_text = z.read(csv_name).decode("utf-8", errors="ignore")
+            ff5_text = _fetch_zip_csv(_FF5_URLS)
             ff5 = _parse_ff_csv(ff5_text)
-            ff5.columns = ["MKT_RF", "SMB", "HML", "RMW", "CMA", "RF"]
+            # All-frequency zip has 5 cols; daily has 6 (RF included)
+            if len(ff5.columns) >= 6:
+                ff5.columns = ["MKT_RF", "SMB", "HML", "RMW", "CMA", "RF"]
+            elif len(ff5.columns) == 5:
+                ff5.columns = ["MKT_RF", "SMB", "HML", "RMW", "CMA"]
+            elif len(ff5.columns) == 4:
+                # 3-factor fallback (F-F_Research_Data_Factors): MKT_RF SMB HML RF
+                ff5.columns = ["MKT_RF", "SMB", "HML", "RF"]
+            else:
+                raise ValueError(f"Unexpected FF5 column count: {len(ff5.columns)}")
 
             # MOM daily
-            rm = sess.get(_MOM_URL, timeout=30)
-            rm.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(rm.content)) as z:
-                csv_name = [n for n in z.namelist() if n.endswith(".CSV")][0]
-                mom_text = z.read(csv_name).decode("utf-8", errors="ignore")
+            mom_text = _fetch_zip_csv(_MOM_URLS)
             mom = _parse_ff_csv(mom_text)
             mom.columns = ["MOM"]
 
@@ -171,7 +202,9 @@ class FactorModelAnalyser:
     def _get_factors(self) -> pd.DataFrame:
         if self._factors_df is None or self._factors_df.empty:
             self.download_factors()
-        return self._factors_df or pd.DataFrame(columns=_FACTORS)
+        if self._factors_df is None or self._factors_df.empty:
+            return pd.DataFrame(columns=_FACTORS)
+        return self._factors_df
 
     # ── regression ────────────────────────────────────────────────────────
 
