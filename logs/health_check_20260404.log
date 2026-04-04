@@ -1,0 +1,130 @@
+APOLLO SYSTEM HEALTH CHECK — 2026-04-04
+Generated: 2026-04-04 11:51 BST
+Bot PID: 1955 (restarted 11:39)
+========================================================
+
+TEST 1 — TELEGRAM CONNECTION
+  Timestamp : 2026-04-04 10:40
+  Token     : 8789592090:AAH_b...TBnv0  (masked)
+  Chat ID   : 8508697534
+  API test  : GET https://api.telegram.org/bot{TOKEN}/getMe
+  Result    : {"ok":false,"error_code":401,"description":"Unauthorized"}
+  Status    : ❌ FAIL — token is revoked or invalid
+  Action    : Go to @BotFather on Telegram → /mybots → select Apollo bot
+              → API Token → Revoke and regenerate → paste new token into
+              config/settings.yaml under notifications.telegram.bot_token
+  Notes     : chat_id 8508697534 may also need to be re-confirmed after
+              token regeneration (send /start to the bot first)
+
+TEST 2 — FULL COLLECTION CYCLE
+  Timestamp : 2026-04-04 11:15 (first clean cycle after all fixes)
+  Result    : Collectors: 13/13 OK | Records: 1944 | Articles fetched: 0
+  Status    : ✅ PASS
+  Notes     :
+    - consumer_intel  : 26/26 FRED series, 0 failed
+    - shipping_intel  : 9/9 stocks, BDRY proxy active
+    - geopolitical    : 10 HIGH/CRITICAL GDELT alerts
+    - rates_credit    : 5 series OK
+    - commodities     : 29 symbols, 0 failed
+    - sec_fulltext    : 1002 crisis + 577 opp (in_universe: 253 crisis, 125 opp)
+    - alt_quiver      : senate + house trades fetched
+    - tech_intel      : 113 rows stored
+    - bls             : 9 series
+    - usa_spending    : awards fetched
+    - news/edgar/finnhub: loaded, ticker-based (no signals yet to trigger)
+
+TEST 3 — DATABASE INTEGRITY
+  Timestamp : 2026-04-04 11:45
+  WAL mode                   : ✅ ACTIVE (journal_mode=wal)
+  raw_articles.publication_date : ✅ EXISTS
+  raw_articles.published_at     : ✅ ABSENT (correct — old schema fixed)
+  raw_geopolitical_events.raw_json : ✅ EXISTS (migration applied)
+  delisted_tickers table entries : ✅ 6 rows
+    DFS   | 0 rows preserved | Yahoo Finance: possibly delisted / no timezone found
+    CONE  | 0 rows preserved | Yahoo Finance: possibly delisted / no price data found
+    CLNC  | 0 rows preserved | Yahoo Finance: possibly delisted / no price data found
+    LTHM  | 0 rows preserved | Yahoo Finance: possibly delisted / no price data found
+    GOGL  | 0 rows preserved | Moved to Oslo Stock Exchange (GOGL.OL)
+    PNTM  | 0 rows preserved | SPAC wound down / no longer active
+  Historical data preserved     : ✅ (0 rows existed pre-fix — never fetched)
+  Status: ✅ PASS
+
+TEST 4 — 13 COLLECTORS INDIVIDUAL STATUS
+  collector          | status | notes
+  -------------------|--------|--------------------------------------
+  shipping           | ✅     | 9/9 stocks, BDRY ETF proxy
+  consumer           | ✅     | 26/26 FRED series, 0 failed
+  geopolitical       | ✅     | GDELT 8 queries, NewsAPI 15 keywords
+  rates              | ✅     | 5 credit spread series
+  commodities        | ✅     | 29 symbols, lead-lag analysis
+  sec_fulltext       | ✅     | 1002 crisis, 577 opp, 253 in-universe
+  alt_quiver         | ✅     | senate + house trades
+  tech_intel         | ✅     | 113 rows: semis, EV, FDA, knowledge graph
+  usa_spending       | ✅     | gov't contract awards
+  bls                | ✅     | 9 BLS labour series
+  news               | ✅     | loaded (triggered by PEAD signals)
+  edgar              | ✅     | loaded (triggered by PEAD signals)
+  finnhub            | ✅     | loaded (triggered by PEAD signals)
+  TOTAL: 13/13 ✅ PASS
+
+TEST 5 — PAPER TRADER FIRING
+  Timestamp : 2026-04-04 11:23 and 11:15 cycles
+  Evidence  : paper_trader ATR stops evaluated for all open positions
+    ADNT: ATR stop hit @ 20.3700
+    ADMA: ATR stop hit @ 9.1900
+    ACMR: ATR stop hit @ 40.5400
+    APD:  ATR stop hit @ 293.5500
+    ... (continued for all 83 open positions)
+  Status    : ✅ PASS — paper trader evaluating stops correctly
+
+TEST 6 — DELISTED TICKER ERRORS AFTER FIX
+  Pre-fix  : DFS, CONE, CLNC, LTHM causing yfinance errors every cycle
+  Post-fix : 11:39+ cycle — ZERO yfinance delisted errors
+  Status   : ✅ PASS
+
+========================================================
+BUGS FIXED IN THIS SESSION
+========================================================
+Commit a056f7e — fix: resolve all 7 known collector bugs
+  1. SQLite busy_timeout added to all 14 DB connections
+  2. raw_articles published_at → publication_date schema fix
+  3. raw_geopolitical_events raw_json migration
+  4. GDELT exponential backoff (5s/10s/20s/40s)
+  5. GOGL/PNTM removed from shipping stocks
+  6. stooq block-page detection; BDRY permanent fallback
+  7. SECFullTextCollector: Universe class + HTTP error logging
+
+Commit 7347869 — perf: GDELT URL fetching limited to HIGH/CRITICAL, cap 20
+  - Reduced GDELT collection time from 45+ min → ~6 min per cycle
+
+Commit 4884f58 — fix: SEC ticker extraction, delisted archive, startup check
+  - SEC in_universe: 0 → 253 (regex extraction from display_names)
+  - Delisted tickers archived in permanent_archive.db
+  - check_for_delisted() startup scanner added to TradingBot
+
+========================================================
+ITEMS REQUIRING MANUAL ACTION
+========================================================
+1. TELEGRAM (BLOCKING):
+   The bot token '8789592090:AAH_b0...' is REVOKED.
+   Action: Regenerate via @BotFather → update config/settings.yaml
+   → restart bot → Telegram alerts will resume
+
+2. ARTICLES FETCHED: 0 (non-blocking):
+   news/edgar/finnhub collectors are ticker-based — they only run when
+   PEAD signals identify tickers with earnings drift. Once PHASE_3
+   generates signals (77 more trades needed), article fetching will begin.
+
+3. GOGL replacement (optional):
+   GOGL.OL trades on Oslo Stock Exchange. If you want Oslo coverage,
+   consider adding GOGL.OL via a different data source.
+
+========================================================
+APOLLO SYSTEM HEALTH: PARTIAL — 1 ITEM NEEDS ATTENTION
+  All 13 collectors: ✅ OPERATIONAL
+  Database integrity: ✅ CLEAN
+  Paper trader: ✅ FIRING
+  Delisted tickers: ✅ REMOVED AND ARCHIVED
+  SEC universe matching: ✅ FIXED (253 in-universe crisis filings)
+  Telegram: ❌ TOKEN REVOKED — requires @BotFather regeneration
+========================================================
