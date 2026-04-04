@@ -1121,7 +1121,112 @@ class PaperTrader:
             except Exception:
                 pass
 
+        # ── Phase 10: signal contradiction scoring ────────────────────────────
+        if all_sigs:
+            all_sigs = self._apply_contradiction_scores(all_sigs)
+
         return all_sigs
+
+    @staticmethod
+    def _apply_contradiction_scores(signals: List[Dict]) -> List[Dict]:
+        """
+        Compute contradiction score for each signal based on buy/sell consensus.
+
+        contradiction_score:
+          0.0 = full consensus (all same direction)
+          1.0 = maximum contradiction (50/50 split with equal weights)
+
+        Effect:
+          - consensus (contradiction < 0.2)  → score * 1.15 boost
+          - strong contradiction (> 0.6)     → score * 0.75 reduction
+          - moderate (0.2–0.6)               → no adjustment
+        """
+        longs  = [s for s in signals if s.get("direction", "LONG") == "LONG"]
+        shorts = [s for s in signals if s.get("direction", "LONG") == "SHORT"]
+        total  = len(signals)
+
+        if total == 0:
+            return signals
+
+        long_wt  = sum(float(s.get("score", 0.5)) for s in longs)
+        short_wt = sum(float(s.get("score", 0.5)) for s in shorts)
+        total_wt = long_wt + short_wt
+
+        if total_wt < 1e-9:
+            contradiction_score = 0.0
+        else:
+            minority_wt = min(long_wt, short_wt)
+            contradiction_score = 2.0 * minority_wt / total_wt  # 0=consensus, 1=50-50
+
+        for s in signals:
+            s["contradiction_score"] = round(contradiction_score, 4)
+            base_score = float(s.get("score", 0.5))
+            if contradiction_score < 0.2:
+                s["score"] = min(base_score * 1.15, 5.0)  # consensus boost
+            elif contradiction_score > 0.6:
+                s["score"] = base_score * 0.75            # disagreement penalty
+
+        return signals
+
+    def pre_short_checklist(self, ticker: str, context: Dict, price_data) -> Dict:
+        """
+        Phase 11: Run 8 checks before allowing a SHORT position.
+        Returns dict with 'passed' bool and 'checks' detail dict.
+        All 8 must pass for a SHORT to be allowed.
+        """
+        checks: Dict[str, bool] = {}
+
+        # 1. Short availability (borrow exists)
+        checks["borrow_available"] = context.get("short_available", True)
+
+        # 2. Not in squeeze territory (days-to-cover < 10)
+        dtc = context.get("days_to_cover")
+        checks["days_to_cover_ok"] = (dtc is None or dtc < 10.0)
+
+        # 3. Short float below 30% (avoid short-squeeze risk)
+        short_float = context.get("short_float_pct", 0.0)
+        checks["short_float_ok"] = short_float < 0.30
+
+        # 4. Not near earnings (within 5 days)
+        days_to_earn = context.get("days_to_earnings")
+        checks["earnings_clear"] = (days_to_earn is None or days_to_earn > 5)
+
+        # 5. Not a biotech with binary catalyst pending
+        sector = context.get("sector", "")
+        has_catalyst = context.get("binary_catalyst_pending", False)
+        checks["biotech_catalyst_clear"] = not (sector in ("Healthcare", "Biotechnology") and has_catalyst)
+
+        # 6. Macro regime not CRISIS (shorts get squeezed in panic)
+        macro_regime = context.get("macro_regime", "NEUTRAL")
+        checks["macro_regime_ok"] = macro_regime != "CRISIS"
+
+        # 7. Volume confirms — need > 0.5× average (not illiquid)
+        try:
+            if price_data is not None and "volume" in price_data.columns:
+                vol_series = price_data["volume"].dropna()
+                if len(vol_series) >= 10:
+                    avg_vol = float(vol_series.iloc[-10:].mean())
+                    last_vol = float(vol_series.iloc[-1])
+                    checks["volume_ok"] = (avg_vol <= 0 or last_vol > avg_vol * 0.5)
+                else:
+                    checks["volume_ok"] = True
+            else:
+                checks["volume_ok"] = True
+        except Exception:
+            checks["volume_ok"] = True
+
+        # 8. Not a UK penny stock (< 10p) — hard to borrow
+        checks["uk_penny_ok"] = True
+        if ticker.endswith(".L"):
+            try:
+                last_price = float(price_data.iloc[-1]["close"] if "close" in price_data.columns
+                                   else price_data.iloc[-1, 3])
+                checks["uk_penny_ok"] = last_price >= 0.10
+            except Exception:
+                pass
+
+        passed = all(checks.values())
+        return {"passed": passed, "checks": checks}
 
     def build_full_context(self, ticker: str) -> Dict:
         """Build full market context for a ticker (lighter version of _capture_context)."""

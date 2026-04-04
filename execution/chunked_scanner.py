@@ -159,6 +159,17 @@ class ChunkedScanner:
                 side = best.get('direction', 'LONG')
                 order_dir = 'buy' if side == 'LONG' else 'short'
 
+                # Phase 11: pre-short checklist
+                if side == 'SHORT' and hasattr(self.trader, 'pre_short_checklist'):
+                    try:
+                        short_check = self.trader.pre_short_checklist(ticker, context, price_data)
+                        if not short_check.get('passed', True):
+                            failed = [k for k, v in short_check.get('checks', {}).items() if not v]
+                            logger.info('Pre-short checklist BLOCKED %s: %s', ticker, failed)
+                            continue
+                    except Exception as _sc_exc:
+                        logger.debug('Pre-short checklist error for %s: %s', ticker, _sc_exc)
+
                 # Place order
                 success = False
                 try:
