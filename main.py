@@ -52,10 +52,59 @@ Commands
 """
 import argparse
 import logging
+import os
 import sys
+import sqlite3 as _sqlite3_raw
 from pathlib import Path
 
 import yaml
+
+# ── Permanent WAL mode patch (must be first, before any DB-touching imports) ──
+# Monkey-patches sqlite3.connect so that EVERY connection opened anywhere
+# in this process automatically gets WAL journal mode + 30 s busy_timeout.
+# This is the single source of truth — adding it to individual files as well
+# is redundant but harmless.
+_orig_sqlite3_connect = _sqlite3_raw.connect
+def _wal_connect(database, *args, **kwargs):
+    conn = _orig_sqlite3_connect(database, *args, **kwargs)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=-32000")
+        conn.execute("PRAGMA foreign_keys=ON")
+    except Exception:
+        pass   # :memory: and read-only DBs ignore silently
+    return conn
+_sqlite3_raw.connect = _wal_connect
+import sqlite3  # noqa: E402  — re-import so all modules get the patched version
+sqlite3.connect = _wal_connect   # belt-and-suspenders: patch the re-imported ref too
+
+# ── Single-instance PID lock ────────────────────────────────────────────────
+_PID_LOCK_FILE = Path("output/apollo.pid")
+
+def _acquire_pid_lock() -> bool:
+    """
+    Write our PID to output/apollo.pid.
+    Returns True if we are the only running instance, False if another is alive.
+    Stale PID files (process dead) are silently replaced.
+    """
+    Path("output").mkdir(exist_ok=True)
+    if _PID_LOCK_FILE.exists():
+        try:
+            old_pid = int(_PID_LOCK_FILE.read_text().strip())
+            # Check if that process is still alive
+            os.kill(old_pid, 0)
+            # If we reach here the process exists — refuse to start
+            print(f"[ABORT] Apollo is already running (PID {old_pid}). "
+                  f"Stop it first with: python3 main.py bot stop", file=sys.stderr)
+            return False
+        except (ProcessLookupError, PermissionError):
+            pass   # Process is dead — stale PID file, safe to overwrite
+        except ValueError:
+            pass   # Corrupt PID file — overwrite
+    _PID_LOCK_FILE.write_text(str(os.getpid()))
+    return True
 
 
 def load_config(path: str = "config/settings.yaml") -> dict:
@@ -3303,9 +3352,19 @@ def _run_bot_command(config: dict, args) -> None:
             print(f"Logs: {log_path}")
             print(f"Stop: python3 main.py bot stop")
         else:
+            # PID lock: refuse to start if another instance is already running
+            if not _acquire_pid_lock():
+                sys.exit(1)
             from execution.trading_bot import TradingBot
             bot = TradingBot(config)
-            bot.run_continuous()
+            try:
+                bot.run_continuous()
+            finally:
+                # Clean up PID lock on exit
+                try:
+                    _PID_LOCK_FILE.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     elif cmd == 'stop':
         try:
