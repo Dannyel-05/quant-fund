@@ -17,11 +17,37 @@ import logging
 import os
 import signal
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# ── Public-holiday tables (extend annually) ────────────────────────────────
+# NYSE closes on these US dates. UK LSE closes on UK dates.
+_US_HOLIDAYS_2026 = {
+    date(2026,  1,  1),  # New Year's Day
+    date(2026,  1, 19),  # MLK Day
+    date(2026,  2, 16),  # Presidents' Day
+    date(2026,  4,  3),  # Good Friday (NYSE closes)
+    date(2026,  5, 25),  # Memorial Day
+    date(2026,  6, 19),  # Juneteenth
+    date(2026,  7,  3),  # Independence Day (observed, Jul 4 = Saturday)
+    date(2026,  9,  7),  # Labor Day
+    date(2026, 11, 26),  # Thanksgiving
+    date(2026, 12, 25),  # Christmas
+}
+_UK_HOLIDAYS_2026 = {
+    date(2026,  1,  1),  # New Year's Day
+    date(2026,  4,  3),  # Good Friday
+    date(2026,  4,  6),  # Easter Monday
+    date(2026,  5,  4),  # Early May bank holiday
+    date(2026,  5, 25),  # Spring bank holiday
+    date(2026,  8, 31),  # Summer bank holiday
+    date(2026, 12, 25),  # Christmas Day
+    date(2026, 12, 28),  # Boxing Day (observed)
+}
+_MARKET_HOLIDAYS = {'UK': _UK_HOLIDAYS_2026, 'US': _US_HOLIDAYS_2026}
 
 
 class TradingBot:
@@ -210,6 +236,9 @@ class TradingBot:
         now = datetime.utcnow()
         if now.weekday() >= 5:  # weekend
             return False
+        today = now.date()
+        if today in _MARKET_HOLIDAYS.get(market, set()):
+            return False  # public holiday
         sched = self.MARKET_SCHEDULE[market]
         open_t  = now.replace(hour=sched['open_hour_gmt'],  minute=sched['open_minute'],  second=0, microsecond=0)
         close_t = now.replace(hour=sched['close_hour_gmt'], minute=sched['close_minute'], second=0, microsecond=0)
