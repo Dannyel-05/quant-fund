@@ -4,12 +4,17 @@ Searches all SEC filings simultaneously for crisis/opportunity keywords.
 No API key required.
 """
 import logging
+import re
 import sqlite3
 import os
 import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import requests
+
+# SEC EFTS display_names format: "COMPANY NAME  (TICK1, TICK2, ...)  (CIK 0000123456)"
+# The ticker group appears immediately before the "(CIK ..." parenthetical.
+_SEC_TICKER_RE = re.compile(r'\(([A-Z][A-Z0-9\.,\s]{0,40}?)\)\s*\(CIK\s*\d')
 
 logger = logging.getLogger(__name__)
 
@@ -142,10 +147,37 @@ class SECFullTextCollector:
                 return []
             hits = r.json().get('hits', {}).get('hits', [])
             results = []
+            _debug_sample_logged = False
             for hit in hits:
                 src = hit.get('_source', {})
-                entity = src.get('entity_name', src.get('display_names', [''])[0] if src.get('display_names') else '')
-                ticker = src.get('ticker', None)
+                display_names = src.get('display_names', [])
+                entity = display_names[0] if display_names else ''
+
+                # SEC EFTS does not return a dedicated 'ticker' field.
+                # Extract ticker(s) from display_names: "COMPANY (TICK1, TICK2) (CIK ...)"
+                ticker = None
+                extracted_tickers = []
+                for dn in display_names:
+                    m = _SEC_TICKER_RE.search(dn)
+                    if m:
+                        for part in m.group(1).split(','):
+                            t = part.strip()
+                            if re.match(r'^[A-Z][A-Z0-9\.]{0,5}$', t):
+                                extracted_tickers.append(t)
+                # Use first extracted ticker as primary; check all against universe
+                if extracted_tickers:
+                    ticker = extracted_tickers[0]
+                in_uni = any(self.in_universe(t) for t in extracted_tickers)
+
+                # Debug log once per scan to show sample tickers for mismatch diagnosis
+                if not _debug_sample_logged and extracted_tickers:
+                    sample_uni = list(self._universe_tickers)[:3]
+                    logger.debug(
+                        'SEC ticker sample: extracted=%s universe_sample=%s in_universe=%s',
+                        extracted_tickers[:3], sample_uni, in_uni,
+                    )
+                    _debug_sample_logged = True
+
                 snippet = ''
                 highlight = hit.get('highlight', {})
                 if highlight:
@@ -157,11 +189,11 @@ class SECFullTextCollector:
                     'keyword': keyword,
                     'entity_name': entity,
                     'ticker': ticker,
-                    'filing_type': src.get('file_type', ''),
-                    'filing_date': src.get('period_of_report', src.get('file_date', '')),
-                    'accession_no': src.get('accession_no', ''),
+                    'filing_type': src.get('file_type', src.get('form', '')),
+                    'filing_date': src.get('file_date', ''),
+                    'accession_no': src.get('adsh', ''),
                     'snippet': snippet,
-                    'in_universe': self.in_universe(ticker),
+                    'in_universe': in_uni,
                     'fetched_at': datetime.now().isoformat(),
                 })
             return results

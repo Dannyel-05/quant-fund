@@ -85,7 +85,9 @@ _HOUSING_HEALTH_SERIES = ["HOUST", "CSUSHPINSA", "MORTGAGE30US"]
 _INFLATION_SERIES = ["CPIAUCSL", "PPIACO"]
 
 # Payment processor proxy tickers
-_PAYMENT_TICKERS = ["V", "MA", "AXP", "DFS"]
+# DFS (Discover Financial Services) removed 2026-04-04: delisted from Yahoo Finance
+# (yfinance: "possibly delisted; no timezone found" every cycle)
+_PAYMENT_TICKERS = ["V", "MA", "AXP"]
 
 # ── Database helpers ──────────────────────────────────────────────────────────
 

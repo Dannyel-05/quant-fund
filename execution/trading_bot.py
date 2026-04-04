@@ -147,6 +147,22 @@ class TradingBot:
 
         logger.info('TradingBot: %d/%d collectors loaded', len(self.collectors), len(collector_specs))
 
+        # Startup check: warn about any newly-delisted tickers in active lists
+        # so they're caught immediately instead of silently failing each cycle.
+        try:
+            from data.collectors.technology_intelligence import check_for_delisted
+            _watch_lists = {
+                'consumer_payment': ['V', 'MA', 'AXP'],
+                'tech_reits':       ['EQIX', 'DLR', 'AMT', 'COR'],
+                'tech_infra':       ['VRT', 'SMCI', 'IREN'],
+                'ev_battery':       ['ALB', 'LAC', 'SQM'],
+                'shipping_stocks':  ['BDRY', 'ZIM', 'MATX', 'SBLK', 'EGLE', 'DSX', 'NMM', 'GNK', 'SB'],
+            }
+            for list_name, tickers in _watch_lists.items():
+                check_for_delisted(tickers, label=list_name)
+        except Exception as _e:
+            logger.debug('check_for_delisted startup scan failed: %s', _e)
+
     # ------------------------------------------------------------------
     def _save_status(self, status: str, extra: Dict = None) -> None:
         """Persist bot status to output/bot_status.json."""

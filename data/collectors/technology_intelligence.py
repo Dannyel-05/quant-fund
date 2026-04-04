@@ -122,6 +122,31 @@ def _fetch_prices(tickers: List[str], period: str = "1y") -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def check_for_delisted(ticker_list: List[str], label: str = "unknown") -> List[str]:
+    """
+    Run at startup to detect any tickers that yfinance can no longer serve.
+    Returns list of problem tickers and logs a WARNING for each one found.
+    These should be moved to the delisted_tickers archive table.
+    """
+    problem = []
+    try:
+        import yfinance as yf
+        for ticker in ticker_list:
+            try:
+                info = yf.Ticker(ticker).fast_info
+                # fast_info raises or returns empty if delisted
+                _ = info.market_cap
+            except Exception:
+                logger.warning(
+                    "check_for_delisted [%s]: %s may be delisted — consider archiving",
+                    label, ticker,
+                )
+                problem.append(ticker)
+    except ImportError:
+        pass
+    return problem
+
+
 # ── 1. Data Centre Intelligence ────────────────────────────────────────────────
 
 class DataCentreIntelligence:
@@ -130,8 +155,10 @@ class DataCentreIntelligence:
     Sources: yfinance for REIT prices, public FRED/EIA data for power costs.
     """
 
-    REITS  = ["EQIX", "DLR", "AMT", "CONE", "COR"]
-    INFRA  = ["VRT",  "SMCI", "IREN", "CLNC"]
+    # CONE (CyrusOne) removed 2026-04-04: delisted from Yahoo Finance
+    REITS  = ["EQIX", "DLR", "AMT", "COR"]
+    # CLNC (Colony Credit) removed 2026-04-04: delisted from Yahoo Finance
+    INFRA  = ["VRT", "SMCI", "IREN"]
     POWER  = ["NEE",  "AES",  "D",   "SO"]  # power utility proxies
 
     def collect(self) -> Dict:
@@ -326,7 +353,8 @@ class EVAdoptionTracker:
     """
 
     EV_MAKERS    = ["TSLA", "RIVN", "LCID", "NIO", "LI", "XPEV"]
-    BATTERY_MAT  = ["ALB", "LTHM", "LAC", "SQM"]   # lithium producers
+    # LTHM (Livent Corp) removed 2026-04-04: delisted from Yahoo Finance; ALB covers lithium
+    BATTERY_MAT  = ["ALB", "LAC", "SQM"]   # lithium producers
     CHARGING     = ["CHPT", "EVGO", "BLNK", "AMRC"]
     TRADITIONAL  = ["F", "GM", "STLA", "HMC", "TM"]  # legacy OEM EV pivot
 
