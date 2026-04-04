@@ -702,6 +702,206 @@ class MathematicalSignals:
 
 
 # ===========================================================================
+# KalmanSignalSmoother
+# ===========================================================================
+
+try:
+    from pykalman import KalmanFilter as _PyKalmanFilter
+    PYKALMAN_AVAILABLE = True
+except ImportError:
+    _PyKalmanFilter = None
+    PYKALMAN_AVAILABLE = False
+    logger.warning("pykalman not installed — Kalman smoothing unavailable")
+
+
+class KalmanSignalSmoother:
+    """
+    Applies Kalman filtering to raw signal scores to reduce noise.
+
+    State-space model:
+        State:       θ_t = θ_{t-1} + w_t    (w_t ~ N(0, Q))
+        Observation: y_t = θ_t + v_t         (v_t ~ N(0, R))
+
+    Usage:
+        smoother = KalmanSignalSmoother()
+        smoothed_score = smoother.smooth_score(raw_scores_list)
+    """
+
+    def __init__(self, transition_cov: float = 1e-3, observation_cov: float = 1e-1) -> None:
+        self._Q = transition_cov    # process noise — how fast state can change
+        self._R = observation_cov   # observation noise — how noisy raw signals are
+        self._filters: Dict[str, Any] = {}
+
+    def smooth_score(self, scores: List[float], ticker: str = "default") -> float:
+        """
+        Given a list of raw signal scores (most recent last), return
+        the Kalman-smoothed estimate of the current score.
+        Returns the last raw score if pykalman unavailable or too few points.
+        """
+        if not scores:
+            return 0.0
+        if not PYKALMAN_AVAILABLE or len(scores) < 3:
+            return float(scores[-1])
+        try:
+            obs = np.array(scores, dtype=float).reshape(-1, 1)
+            kf = _PyKalmanFilter(
+                transition_matrices=[[1]],
+                observation_matrices=[[1]],
+                transition_covariance=[[self._Q]],
+                observation_covariance=[[self._R]],
+                initial_state_mean=[obs[0, 0]],
+                initial_state_covariance=[[1.0]],
+                n_dim_state=1,
+                n_dim_obs=1,
+            )
+            smoothed, _ = kf.smooth(obs)
+            return float(smoothed[-1, 0])
+        except Exception as exc:
+            logger.debug("KalmanSignalSmoother error: %s", exc)
+            return float(scores[-1])
+
+    def smooth_series(self, series: np.ndarray) -> np.ndarray:
+        """
+        Smooth an entire price/score series. Returns same-length array.
+        Falls back to original series if unavailable.
+        """
+        if not PYKALMAN_AVAILABLE or len(series) < 3:
+            return series
+        try:
+            obs = np.array(series, dtype=float).reshape(-1, 1)
+            kf = _PyKalmanFilter(
+                transition_matrices=[[1]],
+                observation_matrices=[[1]],
+                transition_covariance=[[self._Q]],
+                observation_covariance=[[self._R]],
+                initial_state_mean=[obs[0, 0]],
+                initial_state_covariance=[[1.0]],
+                n_dim_state=1,
+                n_dim_obs=1,
+            )
+            smoothed, _ = kf.smooth(obs)
+            return smoothed[:, 0]
+        except Exception as exc:
+            logger.debug("KalmanSignalSmoother.smooth_series error: %s", exc)
+            return series
+
+
+# ===========================================================================
+# KalmanPairsTrader
+# ===========================================================================
+
+class KalmanPairsTrader:
+    """
+    Dynamic hedge ratio estimation for pairs trading using Kalman filter.
+
+    State: x_t = [β_t, α_t]^T  (slope=hedge_ratio, intercept)
+    Observation: y_t = H_t * x_t + v_t
+    where H_t = [price_x_t, 1]
+
+    Generates spread z-score signals:
+      Entry LONG spread  : z < -2.0
+      Entry SHORT spread : z >  2.0
+      Exit              : z crosses zero
+
+    Usage:
+        kpt = KalmanPairsTrader(delta=1e-4)
+        for px, py in zip(prices_x, prices_y):
+            signal = kpt.update(px, py)
+    """
+
+    def __init__(self, delta: float = 1e-4) -> None:
+        self._delta    = delta
+        self._Vw       = delta / (1.0 - delta)   # process noise variance
+        # State: [beta, alpha] — will be initialised on first update
+        self._theta    : Optional[np.ndarray] = None
+        self._P        : Optional[np.ndarray] = None  # state covariance
+        self._spread_history: List[float] = []
+        self._e_history     : List[float] = []
+
+    def update(self, price_x: float, price_y: float) -> Dict[str, Any]:
+        """
+        Process one new price pair.  Returns dict with keys:
+          hedge_ratio, intercept, spread, spread_mean, spread_std, z_score, signal
+        signal: +1 = long spread, -1 = short spread, 0 = hold
+        """
+        if not PYKALMAN_AVAILABLE:
+            return {"signal": 0, "z_score": 0.0, "hedge_ratio": 1.0, "spread": price_y - price_x}
+
+        H = np.array([[price_x, 1.0]])   # (1, 2)
+
+        # Initialise state on first call
+        if self._theta is None:
+            self._theta = np.array([1.0, 0.0])   # [beta=1, alpha=0]
+            self._P     = np.eye(2)
+
+        # Prediction step
+        # (state transition = identity, process noise Q = Vw * I)
+        Q = self._Vw * np.eye(2)
+        P_pred = self._P + Q
+
+        # Innovation
+        y_hat = float(np.squeeze(H @ self._theta))
+        e     = price_y - y_hat                        # innovation (residual)
+        S     = float(np.squeeze(H @ P_pred @ H.T)) + float(np.var(self._e_history[-50:]) if len(self._e_history) >= 10 else 1.0)
+
+        # Kalman gain
+        K = (P_pred @ H.T) / S    # (2, 1)
+
+        # State update
+        self._theta = self._theta + K.flatten() * e
+        self._P     = (np.eye(2) - K @ H) @ P_pred
+
+        beta  = float(self._theta[0])
+        alpha = float(self._theta[1])
+
+        # Spread
+        spread = price_y - beta * price_x - alpha
+        self._spread_history.append(spread)
+        self._e_history.append(e)
+
+        # Keep rolling window (250 days)
+        if len(self._spread_history) > 250:
+            self._spread_history = self._spread_history[-250:]
+        if len(self._e_history) > 250:
+            self._e_history = self._e_history[-250:]
+
+        # Z-score from rolling window
+        if len(self._spread_history) >= 20:
+            mu  = float(np.mean(self._spread_history))
+            std = float(np.std(self._spread_history))
+        else:
+            mu, std = 0.0, 1.0
+
+        z = (spread - mu) / std if std > 1e-10 else 0.0
+
+        # Signal
+        if z < -2.0:
+            signal = 1     # long spread (buy Y, sell X)
+        elif z > 2.0:
+            signal = -1    # short spread (sell Y, buy X)
+        elif abs(z) < 0.1:
+            signal = 0     # exit (mean-reverted)
+        else:
+            signal = 0     # hold
+
+        return {
+            "hedge_ratio": beta,
+            "intercept":   alpha,
+            "spread":      spread,
+            "spread_mean": mu,
+            "spread_std":  std,
+            "z_score":     z,
+            "signal":      signal,
+        }
+
+    def reset(self) -> None:
+        self._theta = None
+        self._P     = None
+        self._spread_history.clear()
+        self._e_history.clear()
+
+
+# ===========================================================================
 # Standalone test
 # ===========================================================================
 
