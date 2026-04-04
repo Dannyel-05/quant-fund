@@ -92,7 +92,7 @@ class MilestoneTracker:
 
     def _telegram(self, text: str) -> None:
         try:
-            tg = self._config.get("telegram", {})
+            tg = self._config.get("notifications", {}).get("telegram", {})
             token   = tg.get("bot_token", "")
             chat_id = tg.get("chat_id", "")
             if not token or not chat_id:

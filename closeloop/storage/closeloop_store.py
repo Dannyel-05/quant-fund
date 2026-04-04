@@ -954,10 +954,16 @@ class ClosedLoopStore:
     # ------------------------------------------------------------------
 
     def count_completed_trades(self) -> int:
-        """Count trades with a recorded exit."""
+        """Count real completed trades, excluding zero-PnL phantom/duplicate entries."""
         try:
             row = self._conn().execute(
-                "SELECT COUNT(*) FROM trade_ledger WHERE exit_date IS NOT NULL"
+                """SELECT COUNT(*) FROM (
+                    SELECT MIN(rowid) as rid
+                    FROM trade_ledger
+                    WHERE exit_date IS NOT NULL
+                      AND gross_pnl != 0.0
+                    GROUP BY ticker, entry_date
+                )"""
             ).fetchone()
             return int(row[0]) if row else 0
         except Exception:

@@ -177,7 +177,7 @@ class ServerMonitor:
 
     def _send_telegram(self, text: str) -> None:
         try:
-            telegram_cfg = self._config.get("telegram", {})
+            telegram_cfg = self._config.get("notifications", {}).get("telegram", {})
             token   = telegram_cfg.get("bot_token", "")
             chat_id = telegram_cfg.get("chat_id", "")
             if not token or not chat_id:
