@@ -536,24 +536,58 @@ class PaperTrader:
         # Track signal tickers for article prioritisation
         signal_tickers = list({a.get('ticker') for a in actions if a.get('ticker')})
 
-        # Wire article reading: fetch + sentiment for every ticker that generated a signal
+        # Fallback: if no signal tickers (weekend / pre-open), use top 20 open positions
+        if not signal_tickers:
+            try:
+                open_rows = self.store.conn.execute(
+                    "SELECT DISTINCT ticker FROM trade_ledger WHERE exit_date IS NULL LIMIT 20"
+                ).fetchall()
+                signal_tickers = [r[0] for r in open_rows]
+                if signal_tickers:
+                    logger.info("Article fallback: using %d open positions for news fetch", len(signal_tickers))
+            except Exception:
+                pass
+
+        # Wire article reading: fetch + VADER sentiment for signal/position tickers
         if signal_tickers:
             try:
                 from data.collectors.advanced_news_intelligence import AdvancedNewsIntelligence
                 ani = AdvancedNewsIntelligence()
                 art_results = ani.collect_and_analyse(signal_tickers)
                 narrative_shifts = art_results.get('narrative_shifts', {})
-                # Attach narrative shift to matching actions
+
+                # VADER sentiment scoring on narrative shift text
+                vader_scores: dict = {}
+                try:
+                    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+                    _sia = SentimentIntensityAnalyzer()
+                    for ticker, shift in narrative_shifts.items():
+                        text = shift.get("text", "") if isinstance(shift, dict) else str(shift)
+                        if text:
+                            vs = _sia.polarity_scores(text)
+                            vader_scores[ticker] = vs.get("compound", 0.0)
+                except Exception:
+                    pass
+
+                # Attach narrative shift + sentiment to matching actions
                 for action in actions:
                     ticker = action.get('ticker')
-                    if ticker and isinstance(action, dict) and ticker in narrative_shifts:
-                        action['article_narrative_shift'] = narrative_shifts[ticker]
+                    if ticker and isinstance(action, dict):
+                        if ticker in narrative_shifts:
+                            action['article_narrative_shift'] = narrative_shifts[ticker]
+                        if ticker in vader_scores:
+                            action['news_sentiment'] = vader_scores[ticker]
+                            # Negative sentiment on a LONG position → add exit pressure
+                            if vader_scores[ticker] < -0.3 and action.get('direction') == 'LONG':
+                                action['sentiment_exit_pressure'] = True
+
                 logger.info(
-                    "Article intelligence: %d articles, %d claims, %d connections, %d tickers",
+                    "Article intelligence: %d articles, %d claims, %d connections, %d tickers, %d sentiment scores",
                     art_results.get('articles_fetched', 0),
                     art_results.get('claims_extracted', 0),
                     art_results.get('connections_found', 0),
                     len(signal_tickers),
+                    len(vader_scores),
                 )
             except Exception as e:
                 logger.debug("Article reading skipped: %s", e)
