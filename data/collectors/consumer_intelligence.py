@@ -93,6 +93,7 @@ def _get_perm_conn() -> sqlite3.Connection:
     _PERM_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_PERM_DB))
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -101,6 +102,7 @@ def _get_hist_conn() -> sqlite3.Connection:
     _HIST_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_HIST_DB))
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -373,7 +375,7 @@ class ConsumerIntelligence:
 
     # ── Public API ─────────────────────────────────────────────────────────
 
-    def collect(self) -> Dict[str, Any]:
+    def collect(self, market=None, **kwargs) -> Dict[str, Any]:
         """
         Fetch all FRED series and payment processor data.
         Stores ALL history permanently. Returns summary dict.

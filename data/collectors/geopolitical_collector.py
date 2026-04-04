@@ -51,11 +51,15 @@ def _get_conn() -> sqlite3.Connection:
     _PERM_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_PERM_DB))
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 def _init_db(conn: sqlite3.Connection) -> None:
+    # raw_geopolitical_events: table may already exist with a different schema from
+    # previous versions. CREATE TABLE IF NOT EXISTS is a no-op if it already exists,
+    # so we use ALTER TABLE ADD COLUMN to add any missing columns.
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS raw_geopolitical_events (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,21 +79,42 @@ def _init_db(conn: sqlite3.Connection) -> None:
             raw_json        TEXT,
             collected_at    TEXT DEFAULT (datetime('now'))
         );
-
+    """)
+    # Migrate: add raw_json column if the table pre-dates it
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(raw_geopolitical_events)").fetchall()}
+    for col, typedef in [
+        ("raw_json",     "TEXT"),
+        ("goldstein_scale", "REAL"),
+        ("affected_sectors", "TEXT"),
+        ("affected_regions", "TEXT"),
+        ("severity",     "TEXT"),
+        ("location",     "TEXT"),
+        ("title",        "TEXT"),
+        ("url",          "TEXT"),
+    ]:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE raw_geopolitical_events ADD COLUMN {col} {typedef}")
+    # raw_articles is created by setup_permanent_archive with publication_date column
+    # (not published_at). Do NOT re-create it here; just ensure it exists with the
+    # correct schema so our INSERTs below work against whatever schema is present.
+    conn.executescript("""
         CREATE TABLE IF NOT EXISTS raw_articles (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            source          TEXT NOT NULL,
-            published_at    TEXT,
+            url             TEXT,
+            fetch_date      TEXT,
+            source          TEXT,
+            ticker_context  TEXT,
+            full_text       TEXT,
+            word_count      INTEGER,
             title           TEXT,
-            description     TEXT,
-            content         TEXT,
-            url             TEXT UNIQUE,
             author          TEXT,
-            severity        TEXT,
-            affected_sectors TEXT,
-            keywords_matched TEXT,
-            raw_json        TEXT,
-            collected_at    TEXT DEFAULT (datetime('now'))
+            publication_date TEXT,
+            is_paywalled    INTEGER DEFAULT 0,
+            fetch_method    TEXT DEFAULT 'newsapi',
+            all_tickers_mentioned   TEXT,
+            all_companies_mentioned TEXT,
+            sentiment_score REAL,
+            article_type    TEXT
         );
     """)
     conn.commit()
@@ -329,7 +354,26 @@ def _fetch_gdelt(conn: sqlite3.Connection) -> List[GeopoliticalAlert]:
                 "maxrecords": 250,
                 "format": "json",
             }
-            resp = requests.get(_GDELT_BASE, params=params, timeout=20)
+            # Retry with exponential backoff to handle GDELT 429 rate limits
+            resp = None
+            for attempt in range(4):
+                try:
+                    resp = requests.get(_GDELT_BASE, params=params, timeout=20)
+                    if resp.status_code == 429:
+                        wait = 2 ** attempt * 5  # 5s, 10s, 20s, 40s
+                        logger.warning("GDELT 429 for '%s', retrying in %ds", query, wait)
+                        time.sleep(wait)
+                        continue
+                    break
+                except requests.exceptions.RequestException as _re:
+                    if attempt < 3:
+                        time.sleep(2 ** attempt * 3)
+                    else:
+                        raise
+            if resp is None or resp.status_code == 429:
+                logger.error("GDELT query '%s' rate-limited after retries; skipping", query)
+                time.sleep(5)
+                continue
             resp.raise_for_status()
             data = resp.json()
             articles = data.get("articles", [])
@@ -436,23 +480,25 @@ def _fetch_newsapi(conn: sqlite3.Connection, api_key: str) -> List[GeopoliticalA
                 modifier = _SEVERITY_MODIFIER.get(severity, 1.0)
 
                 try:
+                    # Use permanent_archive schema (publication_date, not published_at).
+                    # Combine description + content into full_text; store severity in
+                    # article_type so geopolitical context is not lost.
+                    full_text = f"{description}\n{content}".strip()
                     conn.execute(
                         """INSERT OR IGNORE INTO raw_articles
-                           (source, published_at, title, description, content, url,
-                            author, severity, affected_sectors, keywords_matched, raw_json)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                           (source, publication_date, title, full_text, url,
+                            author, article_type, fetch_date, fetch_method)
+                           VALUES (?,?,?,?,?,?,?,?,?)""",
                         (
-                            "newsapi",
+                            "newsapi_geopolitical",
                             published_at,
                             title,
-                            description,
-                            content,
+                            full_text,
                             url,
                             author,
-                            severity,
-                            json.dumps(sectors),
-                            json.dumps([keyword]),
-                            json.dumps(art),
+                            f"geopolitical|{severity}|{','.join(sectors[:3])}",
+                            datetime.utcnow().strftime("%Y-%m-%d"),
+                            "newsapi",
                         ),
                     )
                 except sqlite3.IntegrityError:
@@ -601,7 +647,7 @@ class GeopoliticalCollector:
 
     # ── Public API ─────────────────────────────────────────────────────────
 
-    def collect(self) -> List[GeopoliticalAlert]:
+    def collect(self, market=None, **kwargs) -> List[GeopoliticalAlert]:
         """
         Run all collections. Returns list of GeopoliticalAlert objects.
         Failures in any source are logged and skipped.

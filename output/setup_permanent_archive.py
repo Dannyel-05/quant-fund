@@ -367,6 +367,7 @@ def setup_database(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")   # wait up to 5s before "database is locked"
     conn.execute("PRAGMA cache_size=-32000")   # 32 MB page cache
     conn.commit()
 

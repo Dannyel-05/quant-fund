@@ -228,13 +228,34 @@ class TradingBot:
               f'({len(self.collectors)} collectors)...')
         collected: Dict = {}
 
+        # Collectors that are ticker-based (called in _fetch_articles_for_tickers, not here)
+        _TICKER_BASED = {'news', 'edgar', 'finnhub'}
+
         for name, collector in self.collectors.items():
             try:
                 if name == 'sec_fulltext':
-                    alerts = collector.run_full_daily_scan()
-                    collected[name] = len(alerts) if isinstance(alerts, (list, dict)) else 1
+                    result = collector.run_full_daily_scan()
+                    collected[name] = (result.get('total_crisis', 0) + result.get('total_opportunity', 0)
+                                       if isinstance(result, dict) else 1)
+                elif name in _TICKER_BASED:
+                    # These run per-ticker in _fetch_articles_for_tickers; skip bulk call
+                    collected[name] = 0
+                elif name == 'tech_intel' and hasattr(collector, 'collect_all'):
+                    result = collector.collect_all()
+                    total = sum(v.get('rows', 0) for v in result.values() if isinstance(v, dict))
+                    collected[name] = total
+                elif name == 'bls' and hasattr(collector, 'collect_all_series'):
+                    result = collector.collect_all_series()
+                    collected[name] = len(result) if result else 0
+                elif name == 'usa_spending' and hasattr(collector, 'get_recent_all_awards'):
+                    result = collector.get_recent_all_awards()
+                    collected[name] = len(result) if result else 0
+                elif name == 'alt_quiver' and hasattr(collector, 'get_senate_trades'):
+                    senate = collector.get_senate_trades(days_back=30)
+                    house = collector.get_house_trades(days_back=30)
+                    collected[name] = len(senate) + len(house)
                 elif hasattr(collector, 'collect'):
-                    result = collector.collect(tickers=None, market='us')
+                    result = collector.collect(market='us')
                     collected[name] = len(result) if result else 0
                 elif hasattr(collector, 'run'):
                     collector.run()

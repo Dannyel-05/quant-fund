@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 _CREATE_SQL = """
 PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS raw_data (
@@ -150,6 +151,7 @@ class AltDataStore:
             )
             self._local.conn.row_factory = sqlite3.Row
             self._local.conn.execute("PRAGMA journal_mode=WAL")
+            self._local.conn.execute("PRAGMA busy_timeout=5000")
             self._local.conn.execute("PRAGMA foreign_keys=ON")
         return self._local.conn
 

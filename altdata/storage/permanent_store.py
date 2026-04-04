@@ -38,6 +38,7 @@ _local = threading.local()
 
 _DDL = """
 PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS permanent_log (
@@ -137,7 +138,7 @@ class PermanentStore:
     def _connect(self) -> sqlite3.Connection:
         if not getattr(_local, "perm_conn", None):
             conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
-            conn.executescript("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+            conn.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")
             conn.row_factory = sqlite3.Row
             _local.perm_conn = conn
         return _local.perm_conn

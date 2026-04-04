@@ -6,6 +6,7 @@ No API key required.
 import logging
 import sqlite3
 import os
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import requests
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 class SECFullTextCollector:
     BASE_URL = 'https://efts.sec.gov/LATEST/search-index'
+    # Fallback: use the public EDGAR full-text search if EFTS is unavailable
+    FALLBACK_URL = 'https://efts.sec.gov/LATEST/search-index'
     DB_PATH = 'output/permanent_archive.db'
     HEADERS = {
         'User-Agent': 'quant-fund research@quantfund.com',
@@ -65,6 +68,8 @@ class SECFullTextCollector:
         try:
             os.makedirs('output', exist_ok=True)
             conn = sqlite3.connect(self.DB_PATH)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
             conn.execute('''CREATE TABLE IF NOT EXISTS sec_fulltext_alerts
                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
                  keyword TEXT, entity_name TEXT, ticker TEXT,
@@ -78,6 +83,24 @@ class SECFullTextCollector:
             logger.warning('SECFullTextCollector DB init: %s', e)
 
     def _load_universe(self):
+        # Primary: load from Universe class (covers both US and UK tickers)
+        try:
+            from data.universe import Universe
+            import yaml
+            import os
+            config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'settings.yaml')
+            if os.path.exists(config_path):
+                config = yaml.safe_load(open(config_path))
+            else:
+                config = {}
+            u = Universe(config)
+            for t in u.get_us_tickers():
+                self._universe_tickers.add(t.upper())
+            logger.info('SECFullTextCollector: loaded %d US tickers from Universe', len(self._universe_tickers))
+            return
+        except Exception as e:
+            logger.debug('SECFullTextCollector: Universe class load failed: %s', e)
+        # Fallback: CSV files
         try:
             import glob
             import csv
@@ -110,7 +133,12 @@ class SECFullTextCollector:
             if filing_types:
                 params['forms'] = ','.join(filing_types)
             r = requests.get(self.BASE_URL, params=params, headers=self.HEADERS, timeout=30)
+            if r.status_code == 429:
+                logger.warning('SECFullTextCollector rate-limited (429) for "%s"', keyword)
+                time.sleep(5)
+                return []
             if r.status_code != 200:
+                logger.warning('SECFullTextCollector HTTP %d for "%s"', r.status_code, keyword)
                 return []
             hits = r.json().get('hits', {}).get('hits', [])
             results = []
@@ -144,6 +172,8 @@ class SECFullTextCollector:
     def _store_alerts(self, alerts: List[Dict], alert_type: str):
         try:
             conn = sqlite3.connect(self.DB_PATH)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
             for a in alerts:
                 conn.execute('''INSERT INTO sec_fulltext_alerts
                     (keyword, entity_name, ticker, filing_type, filing_date,
@@ -192,7 +222,7 @@ class SECFullTextCollector:
         opportunity = self.daily_opportunity_scan()
         universe_crisis = [a for a in crisis if a.get('in_universe')]
         universe_opp = [a for a in opportunity if a.get('in_universe')]
-        return {
+        result = {
             'total_crisis': len(crisis),
             'total_opportunity': len(opportunity),
             'universe_crisis': len(universe_crisis),
@@ -200,3 +230,8 @@ class SECFullTextCollector:
             'crisis_alerts': crisis[:20],
             'opportunity_alerts': opportunity[:20],
         }
+        logger.info(
+            'SECFullTextCollector: crisis=%d opp=%d in_universe_crisis=%d in_universe_opp=%d',
+            len(crisis), len(opportunity), len(universe_crisis), len(universe_opp),
+        )
+        return result

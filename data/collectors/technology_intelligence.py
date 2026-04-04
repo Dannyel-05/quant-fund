@@ -54,6 +54,7 @@ TECH_SECTOR_TICKERS = {
 def _ensure_tech_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         PRAGMA journal_mode=WAL;
+        PRAGMA busy_timeout=5000;
 
         CREATE TABLE IF NOT EXISTS tech_intelligence (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -560,6 +561,7 @@ class TechnologyIntelligence:
 
         with sqlite3.connect(_PERM_DB) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
             _ensure_tech_tables(conn)
 
             # Data Centre

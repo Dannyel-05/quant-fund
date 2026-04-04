@@ -67,8 +67,10 @@ STOOQ_BDI_URL = "https://stooq.com/q/d/l/?s=bdi&i=d"
 STOOQ_HISTORY_START = "2000-01-01"
 
 SHIPPING_STOCKS = [
-    "BDRY", "ZIM", "MATX", "SBLK", "GOGL",
-    "EGLE", "DSX", "NMM", "GNK", "SB", "PNTM",
+    "BDRY", "ZIM", "MATX", "SBLK",
+    "EGLE", "DSX", "NMM", "GNK", "SB",
+    # GOGL: delisted from US exchange (trades Oslo OSE as GOGL.OL); removed
+    # PNTM: SPAC wound down; removed
 ]
 STOCK_HISTORY_START = "2010-01-01"
 
@@ -145,6 +147,7 @@ def _load_config() -> Dict[str, Any]:
 def _get_hist_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(HISTORICAL_DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
@@ -225,7 +228,7 @@ class BDIFetcher:
             logger.info("BDI: fetched %d rows from stooq.com", len(df))
             return df, "BDI"
 
-        logger.warning("stooq BDI fetch failed — falling back to BDRY ETF proxy")
+        logger.info("stooq BDI unavailable — using BDRY ETF proxy (permanent fallback)")
         df = self._fetch_bdry_proxy()
         if df is not None and not df.empty:
             logger.info("BDI proxy: fetched %d rows for BDRY", len(df))
@@ -238,8 +241,9 @@ class BDIFetcher:
             resp = requests.get(STOOQ_BDI_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
             resp.raise_for_status()
             text = resp.text.strip()
-            if not text or "No data" in text or len(text) < 50:
-                logger.warning("stooq returned empty/invalid response")
+            # stooq now returns a "contact us" block page instead of CSV data
+            if not text or "No data" in text or "write to www@stooq.com" in text or len(text) < 50:
+                logger.debug("stooq returned empty/blocked response — using BDRY proxy")
                 return None
             df = pd.read_csv(io.StringIO(text))
             df.columns = [c.lower().strip() for c in df.columns]
@@ -550,7 +554,7 @@ class ShippingIntelligence:
 
     # ── Public API ───────────────────────────────────────────────────────────
 
-    def collect(self) -> Dict[str, Any]:
+    def collect(self, market=None, **kwargs) -> Dict[str, Any]:
         """
         Run all data collection steps.  Returns a summary dict.
         Safe to call repeatedly — uses upsert / idempotent inserts.
