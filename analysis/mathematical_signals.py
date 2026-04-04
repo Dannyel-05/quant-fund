@@ -262,6 +262,257 @@ class HMMSignals:
 
 
 # ===========================================================================
+# FiveStateHMM
+# ===========================================================================
+
+class FiveStateHMM:
+    """
+    5-state GaussianHMM (CRISIS, BEAR, NEUTRAL, BULL, EUPHORIA).
+
+    Features (5-dimensional observation):
+        1. log_return       — daily log return
+        2. realized_vol     — 30-day rolling realised volatility (VIX-proxy)
+        3. volume_ratio     — volume / 20-day avg volume
+        4. vix_proxy        — same as realized_vol (standalone feature slot)
+        5. yield_curve_prx  — 10-day momentum minus 30-day momentum (divergence)
+
+    Backwards compatible with HMMSignals — does NOT replace it.
+    """
+
+    STATE_LABELS = ["CRISIS", "BEAR", "NEUTRAL", "BULL", "EUPHORIA"]
+
+    # Regime weights: signal_type → multiplier
+    _REGIME_WEIGHTS = {
+        "BULL":     {"momentum": 2.0, "mean_reversion": 0.5},
+        "EUPHORIA": {"momentum": 1.5, "mean_reversion": 0.3, "max_position_pct": 0.5},
+        "NEUTRAL":  {},   # all × 1.0
+        "BEAR":     {"momentum": 0.3, "mean_reversion": 2.0},
+        "CRISIS":   {"all_longs": 0.0},   # shorts only
+    }
+
+    def __init__(self):
+        self._model: Optional[Any] = None
+        self._state_map: Dict[int, str] = {}   # state_idx → label
+        self._last_features: Optional[np.ndarray] = None
+        self._fitted = False
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _regularize_model(model: Any) -> None:
+        """Fix degenerate transmat_ rows (zero sum → uniform) in-place."""
+        try:
+            eps = 1e-8
+            A = model.transmat_
+            row_sums = A.sum(axis=1)
+            for i, s in enumerate(row_sums):
+                if s < eps:
+                    A[i, :] = 1.0 / A.shape[1]
+            # renormalize all rows
+            model.transmat_ = A / A.sum(axis=1, keepdims=True)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    def _build_features(self, price_df: pd.DataFrame) -> Optional[np.ndarray]:
+        required = {"Open", "High", "Low", "Close", "Volume"}
+        missing = required - set(price_df.columns)
+        if missing:
+            logger.warning("FiveStateHMM: missing columns %s", missing)
+            return None
+
+        df = price_df[["Open", "High", "Low", "Close", "Volume"]].copy().dropna()
+        if len(df) < MIN_HISTORY_DAYS:
+            return None
+
+        close = df["Close"].astype(float)
+        vol   = df["Volume"].astype(float)
+
+        # 1. log return
+        log_ret = np.log(close / close.shift(1)).fillna(0).values
+
+        # 2. 30-day realised vol (VIX-proxy)
+        realized_vol = (
+            np.log(close / close.shift(1))
+            .rolling(30, min_periods=10)
+            .std()
+            .fillna(0)
+            .values
+        )
+
+        # 3. volume ratio vs 20-day avg
+        vol_mean = vol.rolling(20, min_periods=5).mean().replace(0, np.nan)
+        vol_ratio = (vol / vol_mean).fillna(1.0).values
+
+        # 4. Short-term vol (5-day) — distinct from 30-day realized vol above
+        short_vol = (
+            np.log(close / close.shift(1))
+            .rolling(5, min_periods=3)
+            .std()
+            .fillna(0)
+            .values
+        )
+
+        # 5. yield-curve proxy: 10d momentum minus 30d momentum
+        mom10 = (close / close.shift(10) - 1).fillna(0).values
+        mom30 = (close / close.shift(30) - 1).fillna(0).values
+        yield_curve_prx = mom10 - mom30
+
+        features = np.column_stack([log_ret, realized_vol, vol_ratio,
+                                    short_vol, yield_curve_prx])
+        return features
+
+    # ------------------------------------------------------------------
+    def fit(self, price_df: pd.DataFrame) -> bool:
+        """Fit 5-state HMM on price_df. Returns True on success."""
+        if not HMM_AVAILABLE:
+            logger.warning("FiveStateHMM: hmmlearn not available")
+            return False
+
+        try:
+            features = self._build_features(price_df)
+            if features is None:
+                return False
+
+            model = None
+            for cov_type in ("diag", "full"):
+                try:
+                    m = _hmm_module.GaussianHMM(
+                        n_components=5,
+                        covariance_type=cov_type,
+                        n_iter=100,
+                        random_state=42,
+                        verbose=False,
+                    )
+                    m.fit(features)
+                    self._regularize_model(m)
+                    model = m
+                    break
+                except Exception:
+                    continue
+            if model is None:
+                return False
+
+            # Map states by mean return: lowest=CRISIS, highest=EUPHORIA
+            mean_returns = model.means_[:, 0]
+            sorted_idx = np.argsort(mean_returns)   # ascending
+            for rank, state_idx in enumerate(sorted_idx):
+                self._state_map[int(state_idx)] = self.STATE_LABELS[rank]
+
+            self._model = model
+            self._last_features = features
+            self._fitted = True
+            logger.info("FiveStateHMM: fitted. State map: %s", self._state_map)
+            return True
+
+        except Exception as exc:
+            logger.warning("FiveStateHMM.fit error: %s", exc)
+            return False
+
+    # ------------------------------------------------------------------
+    def get_current_label(self) -> str:
+        """Return current state label (CRISIS/BEAR/NEUTRAL/BULL/EUPHORIA)."""
+        if not self._fitted or self._model is None or self._last_features is None:
+            return "NEUTRAL"
+        try:
+            probs = self._model.predict_proba(self._last_features)
+            current_state = int(np.argmax(probs[-1]))
+            return self._state_map.get(current_state, "NEUTRAL")
+        except Exception as exc:
+            logger.warning("FiveStateHMM.get_current_label error: %s", exc)
+            return "NEUTRAL"
+
+    # ------------------------------------------------------------------
+    def get_regime_weights(self, state: str) -> Dict[str, float]:
+        """
+        Return signal multiplier dict for the given state label.
+        Absent keys default to 1.0.
+        """
+        return dict(self._REGIME_WEIGHTS.get(state, {}))
+
+    # ------------------------------------------------------------------
+    def compare_aic_bic(self, price_df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Fit both 3-state and 5-state HMMs on price_df and return
+        {aic_3state, bic_3state, aic_5state, bic_5state, preferred}.
+        """
+        if not HMM_AVAILABLE:
+            return {"error": "hmmlearn not available"}
+
+        results: Dict[str, Any] = {}
+        features = self._build_features(price_df)
+        if features is None:
+            return {"error": "insufficient data"}
+
+        for n_states in (3, 5):
+            m = None
+            for cov_type in ("diag", "full"):
+                try:
+                    _m = _hmm_module.GaussianHMM(
+                        n_components=n_states,
+                        covariance_type=cov_type,
+                        n_iter=200,
+                        random_state=42,
+                        verbose=False,
+                    )
+                    _m.fit(features)
+                    self._regularize_model(_m)
+                    _m.score(features)  # validate
+                    m = _m
+                    break
+                except Exception:
+                    continue
+            if m is None:
+                logger.warning("FiveStateHMM.compare_aic_bic n=%d: all cov_types failed", n_states)
+                continue
+            try:
+                logL = m.score(features)
+                n_obs = features.shape[0]
+                n_feat = features.shape[1]
+                # Param count for diag covariance (conservative estimate)
+                k = (n_states - 1) + n_states * (n_states - 1) + \
+                    n_states * n_feat * 2  # means + diag variances
+                aic = -2 * logL * n_obs + 2 * k
+                bic = -2 * logL * n_obs + k * np.log(n_obs)
+                tag = f"{n_states}state"
+                results[f"aic_{tag}"] = float(aic)
+                results[f"bic_{tag}"] = float(bic)
+            except Exception as exc:
+                logger.warning("FiveStateHMM.compare_aic_bic n=%d score error: %s", n_states, exc)
+
+        # Preferred = lower BIC
+        aic3 = results.get("aic_3state", float("inf"))
+        bic3 = results.get("bic_3state", float("inf"))
+        bic5 = results.get("bic_5state", float("inf"))
+        results["preferred"] = "5state" if bic5 < bic3 else "3state"
+        return results
+
+    # ------------------------------------------------------------------
+    def log_transition_matrix(self) -> None:
+        """Log the transition probability matrix A."""
+        if not self._fitted or self._model is None:
+            logger.info("FiveStateHMM.log_transition_matrix: model not fitted")
+            return
+        try:
+            A = self._model.transmat_
+            logger.info("FiveStateHMM transition matrix:")
+            for i, row in enumerate(A):
+                label_from = self._state_map.get(i, str(i))
+                row_str = "  ".join(f"{p:.3f}" for p in row)
+                logger.info("  %s → [%s]", label_from, row_str)
+        except Exception as exc:
+            logger.warning("FiveStateHMM.log_transition_matrix error: %s", exc)
+
+    # ------------------------------------------------------------------
+    def partial_fit(self, new_price_df: pd.DataFrame, lookback_days: int = 252) -> bool:
+        """
+        Online update: re-fit on the last *lookback_days* rows of price data.
+        """
+        if len(new_price_df) > lookback_days:
+            new_price_df = new_price_df.iloc[-lookback_days:]
+        return self.fit(new_price_df)
+
+
+# ===========================================================================
 # AutocorrelationSignals
 # ===========================================================================
 
