@@ -85,6 +85,9 @@ def _init_db(conn: sqlite3.Connection) -> None:
     for col, typedef in [
         ("raw_json",     "TEXT"),
         ("goldstein_scale", "REAL"),
+        ("magnitude",    "REAL"),
+        ("latitude",     "REAL"),
+        ("longitude",    "REAL"),
         ("affected_sectors", "TEXT"),
         ("affected_regions", "TEXT"),
         ("severity",     "TEXT"),
