@@ -232,6 +232,14 @@ class PaperTrader:
         except Exception:
             self.adaptive_sizer = None
 
+        # ── Trailing stop manager ─────────────────────────────────────
+        try:
+            from execution.trailing_stops import TrailingStopManager
+            self._trailing_stops = TrailingStopManager()
+        except Exception as e:
+            logger.warning("TrailingStopManager init failed: %s", e)
+            self._trailing_stops = None
+
         # ── Ensure signals_log table exists ──────────────────────────
         import sqlite3, os as _os
         _os.makedirs('output', exist_ok=True)
@@ -1033,6 +1041,13 @@ class PaperTrader:
                 "is_submitted_only": not _is_filled,
             }
 
+            # Register with trailing stop manager
+            if self._trailing_stops is not None:
+                try:
+                    self._trailing_stops.add_position(ticker, entry_price=price, current_price=price)
+                except Exception:
+                    pass
+
             # Persist open position in closeloop_store — only for confirmed fills
             try:
                 if self._store is not None and _is_filled:
@@ -1369,6 +1384,37 @@ class PaperTrader:
                 continue
 
             # ----------------------------------------------------------
+            # 1b. Trailing stop (tiered — activates after 5% gain)
+            # ----------------------------------------------------------
+            if self._trailing_stops is not None:
+                try:
+                    old_tier = self._trailing_stops.tier(ticker) if hasattr(self._trailing_stops, 'tier') else None
+                    self._trailing_stops.observe(ticker, price, entry_price=entry)
+                    new_tier = self._trailing_stops.tier(ticker) if hasattr(self._trailing_stops, 'tier') else None
+                    # Alert on tier graduation
+                    if old_tier is not None and new_tier is not None and new_tier > old_tier:
+                        gain_pct = (price - entry) / entry * 100 if entry else 0
+                        _tier_msg = (
+                            f"TRAILING STOP TIER UP: {ticker} "
+                            f"Tier {old_tier}\u2192{new_tier} "
+                            f"(gain={gain_pct:.1f}%, stop={self._trailing_stops.stop_price(ticker):.4f})"
+                            if hasattr(self._trailing_stops, 'stop_price') else
+                            f"TRAILING STOP TIER UP: {ticker} Tier {old_tier}\u2192{new_tier} (gain={gain_pct:.1f}%)"
+                        )
+                        logger.info(_tier_msg)
+                        try:
+                            from altdata.notifications.notifier import Notifier
+                            Notifier(self.config)._send_telegram(_tier_msg)
+                        except Exception:
+                            pass
+                    if self._trailing_stops.should_exit(ticker, price):
+                        logger.info("%s: trailing stop triggered @ %.4f", ticker, price)
+                        self._close_position(ticker, reason="trailing_stop", price=price)
+                        continue
+                except Exception as _te:
+                    logger.debug("Trailing stop error for %s: %s", ticker, _te)
+
+            # ----------------------------------------------------------
             # 2. Scale-out at 50% and 100% of target delta
             # ----------------------------------------------------------
             pnl_pct = direction * (price - entry) / entry if entry else 0.0
@@ -1527,6 +1573,11 @@ class PaperTrader:
                 "Closed %s @ %.4f | reason=%s | P&L=%.2f%%", ticker, price, reason, pnl_pct
             )
             del self.active[ticker]
+            if self._trailing_stops is not None:
+                try:
+                    self._trailing_stops.remove_position(ticker)
+                except Exception:
+                    pass
         except Exception as e:
             logger.error("Close failed for %s: %s", ticker, e)
 
