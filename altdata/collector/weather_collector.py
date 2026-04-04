@@ -325,7 +325,7 @@ class WeatherCollector:
 
     def collect(self, tickers: List[str], market: str = "us") -> List[dict]:
         timestamp = datetime.now().isoformat()
-        api_key = self.config.get("openweathermap_api_key")
+        api_key = self.config.get("api_keys", {}).get("openweathermap", "")
 
         cities: List[str] = self.config.get("weather_cities", ["New York", "London", "Chicago"])
 

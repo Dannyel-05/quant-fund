@@ -346,21 +346,24 @@ class TradingBot:
         for ticker in tickers[:50]:  # cap at 50 to avoid slowdown
             try:
                 if news_col and hasattr(news_col, 'collect'):
-                    result = news_col.collect([ticker], 'us', self.config)
+                    # NewsCollector stores config at init — do not pass extra arg
+                    result = news_col.collect([ticker], 'us')
                     if result:
                         fetched += len(result) if isinstance(result, list) else 1
             except Exception:
                 pass
             try:
-                if finnhub_col and hasattr(finnhub_col, 'get_company_news'):
-                    news = finnhub_col.get_company_news(ticker)
+                if finnhub_col and hasattr(finnhub_col, 'collect'):
+                    # FinnhubCollector uses collect(tickers, market), not get_company_news
+                    news = finnhub_col.collect([ticker], 'us')
                     if news:
                         fetched += len(news)
             except Exception:
                 pass
             try:
                 if edgar_col and hasattr(edgar_col, 'collect'):
-                    filings = edgar_col.collect([ticker], 'us', self.config)
+                    # SECEdgarCollector stores config at init — do not pass extra arg
+                    filings = edgar_col.collect([ticker], 'us')
                     if filings:
                         fetched += len(filings) if isinstance(filings, list) else 1
             except Exception:

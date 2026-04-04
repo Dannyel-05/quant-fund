@@ -213,10 +213,7 @@ class RatesCreditCollector:
             self.config = self._load_config(config_path)
         else:
             self.config = {}
-        self.fred_api_key: str = (
-            self.config.get("api_keys", {}).get("fred", "") or
-            self.config.get("altdata", {}).get("collectors", {}).get("fred", {}).get("api_key", "")
-        )
+        self.fred_api_key: str = self.config.get("api_keys", {}).get("fred", "")
         # In-memory cache of recent series data for signal calculation
         self._dgs10: Optional[pd.Series] = None
         self._dgs2: Optional[pd.Series] = None

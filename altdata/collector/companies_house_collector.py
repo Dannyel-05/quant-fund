@@ -187,7 +187,7 @@ def collect(tickers: list, market: str, config: dict = None) -> list:
         .get("companies_house", {})
     )
 
-    api_key: str = ch_cfg.get("api_key", "")
+    api_key: str = (config.get("api_keys") or {}).get("companies_house", "") or ch_cfg.get("api_key", "")
 
     if not api_key:
         logger.warning(
