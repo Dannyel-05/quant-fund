@@ -1221,6 +1221,39 @@ class PaperTrader:
         """
         checks: Dict[str, bool] = {}
 
+        # Check 0: Regime gate — no shorts in BULL
+        try:
+            from analysis.regime_detector import RegimeDetector
+            if not hasattr(self, '_regime_detector'):
+                self._regime_detector = RegimeDetector()
+            regime = self._regime_detector.get_current_regime()
+            if regime == "BULL":
+                checks["regime_allows_short"] = False
+                logger.info("SHORT_REJECTED: pre_short_checklist: %s BLOCKED — BULL regime (no shorts)", ticker)
+                return {"passed": False, "checks": checks, "reason": "bull_regime"}
+            checks["regime_allows_short"] = True
+        except Exception:
+            checks["regime_allows_short"] = True  # fail open
+
+        # RSI + momentum filter for short entries
+        try:
+            if price_data is not None and not price_data.empty and len(price_data) >= 25:
+                from analysis.technical_indicators import TechnicalIndicatorCalculator
+                rsi = TechnicalIndicatorCalculator.rsi(price_data)
+                # Only short if RSI > 65 (overbought) AND 20d momentum is negative
+                closes = price_data['close'].values if 'close' in price_data.columns else price_data.iloc[:, 3].values
+                mom_20d = (closes[-1] - closes[-21]) / closes[-21] if len(closes) >= 21 else 0
+                checks["short_momentum_ok"] = bool(rsi is not None and rsi > 65 and mom_20d < 0)
+                if not checks["short_momentum_ok"]:
+                    logger.info(
+                        "SHORT_REJECTED: pre_short_checklist: %s BLOCKED — RSI=%.1f mom20d=%.1f%% (need RSI>65 + neg momentum)",
+                        ticker, rsi or 0, mom_20d * 100
+                    )
+            else:
+                checks["short_momentum_ok"] = True  # no data, fail open
+        except Exception:
+            checks["short_momentum_ok"] = True
+
         # 1. Short availability (borrow exists)
         checks["borrow_available"] = context.get("short_available", True)
 
@@ -1394,7 +1427,9 @@ class PaperTrader:
             # ----------------------------------------------------------
             # 1. ATR stop loss
             # ----------------------------------------------------------
-            stop = entry - direction * _ATR_STOP_MULTIPLIER * atr
+            # Tighter stop for shorts (1.0x ATR) vs longs (1.5x ATR)
+            atr_mult = 1.0 if direction < 0 else _ATR_STOP_MULTIPLIER
+            stop = entry - direction * atr_mult * atr
             hit_stop = (direction > 0 and price <= stop) or (direction < 0 and price >= stop)
             if hit_stop:
                 logger.info("%s: ATR stop hit @ %.4f (stop=%.4f)", ticker, price, stop)
