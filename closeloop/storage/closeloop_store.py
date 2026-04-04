@@ -285,6 +285,18 @@ class ClosedLoopStore:
         conn = self._conn()
         conn.executescript(_CREATE_TABLES)
         conn.commit()
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """Add new columns to trade_ledger if they don't exist (migration-safe)."""
+        conn = self._conn()
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(trade_ledger)").fetchall()}
+        if 'order_status' not in existing:
+            conn.execute("ALTER TABLE trade_ledger ADD COLUMN order_status TEXT DEFAULT 'unknown'")
+            conn.commit()
+        if 'is_phantom' not in existing:
+            conn.execute("ALTER TABLE trade_ledger ADD COLUMN is_phantom INTEGER DEFAULT 0")
+            conn.commit()
 
     # ------------------------------------------------------------------
     # Trade ledger
@@ -962,6 +974,7 @@ class ClosedLoopStore:
                     FROM trade_ledger
                     WHERE exit_date IS NOT NULL
                       AND gross_pnl != 0.0
+                      AND (is_phantom = 0 OR is_phantom IS NULL)
                     GROUP BY ticker, entry_date
                 )"""
             ).fetchone()

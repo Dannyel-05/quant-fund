@@ -994,7 +994,10 @@ class PaperTrader:
         except Exception as _e:
             logger.debug("place_order routing error, falling back: %s", _e)
             result = {'status': 'error'}
-        if result.get("status") in ("filled", "submitted"):
+        _order_status = result.get("status", "error")
+        _is_filled = _order_status == "filled"
+        _is_submitted = _order_status == "submitted"
+        if _is_filled or _is_submitted:
             self._cached_portfolio = None  # invalidate so next check reflects new position
             self._cached_equity = None
             atr = self._compute_atr(ticker, price_df=price_df)
@@ -1027,11 +1030,12 @@ class PaperTrader:
                 "context_at_open": context_at_open,
                 "signal_type": str(signal.get("signal_type", "pead")).lower(),
                 "tier": str(signal.get("_tier", "TIER_1_SMALLCAP")),
+                "is_submitted_only": not _is_filled,
             }
 
-            # Persist open position in closeloop_store
+            # Persist open position in closeloop_store — only for confirmed fills
             try:
-                if self._store is not None:
+                if self._store is not None and _is_filled:
                     trade_record = {
                         "ticker": ticker,
                         "market": market,
@@ -1039,9 +1043,15 @@ class PaperTrader:
                         "entry_date": entry_date,
                         "entry_price": price,
                         "position_size": shares,
+                        "order_status": _order_status,
+                        "is_phantom": 0,
                     }
                     trade_id = self._store.record_trade(trade_record, context_at_open)
                     self.active[ticker]["trade_id"] = trade_id
+                elif _is_submitted:
+                    logger.info(
+                        "%s: order submitted (not filled) — tracking in memory only", ticker
+                    )
             except Exception as e:
                 logger.warning("Failed to persist trade open in closeloop_store: %s", e)
 
@@ -1057,14 +1067,16 @@ class PaperTrader:
                 "signal_type": str(signal.get("signal_type", "pead")).lower(),
                 "observation_mode": self.observation_mode,
                 "context_at_open": context_at_open,
+                "order_status": _order_status,
             })
 
-            self._log_to_signals_db(
-                ticker, signal, confidence, direction,
-                was_traded=True,
-                context=context_at_open,
-                trade_id=self.active[ticker].get("trade_id"),
-            )
+            if _is_filled:
+                self._log_to_signals_db(
+                    ticker, signal, confidence, direction,
+                    was_traded=True,
+                    context=context_at_open,
+                    trade_id=self.active[ticker].get("trade_id"),
+                )
             logger.info(
                 "Opened %s %s @ %.4f | target=%.4f | stop=%.4f | ATR=%.4f | obs_mode=%s",
                 order_dir.upper(), ticker, price, target_price,
