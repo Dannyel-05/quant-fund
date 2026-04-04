@@ -240,6 +240,14 @@ class PaperTrader:
             logger.warning("TrailingStopManager init failed: %s", e)
             self._trailing_stops = None
 
+        # ── Cooling-off tracker ────────────────────────────────────────
+        try:
+            from execution.cooling_off_tracker import StockCoolingOffTracker
+            self._cooling_off = StockCoolingOffTracker(cooling_days=5)
+        except Exception as e:
+            logger.warning("CoolingOffTracker init failed: %s", e)
+            self._cooling_off = None
+
         # ── Ensure signals_log table exists ──────────────────────────
         import sqlite3, os as _os
         _os.makedirs('output', exist_ok=True)
@@ -982,6 +990,16 @@ class PaperTrader:
         except Exception:
             pass  # fail open
 
+        # Cooling-off check — block re-entry after a losing trade
+        if self._cooling_off is not None:
+            try:
+                if self._cooling_off.is_cooling_off(ticker):
+                    days_left = self._cooling_off.days_remaining(ticker)
+                    logger.info("%s: blocked by cooling-off (%d days remaining)", ticker, days_left)
+                    return None
+            except Exception:
+                pass
+
         equity = getattr(self, '_cached_equity', None) or self.broker.get_account_value()
         value = equity * size_pct
         shares = value / price
@@ -1506,6 +1524,27 @@ class PaperTrader:
                 holding_days = 0
 
             return_pct = pnl_pct / 100.0
+
+            # Register with cooling-off tracker
+            if self._cooling_off is not None:
+                try:
+                    from datetime import date as _date
+                    self._cooling_off.register_exit(
+                        ticker=ticker,
+                        exit_date=_date.today(),
+                        exit_price=price,
+                        pnl_pct=return_pct,
+                    )
+                    if return_pct < 0:
+                        _cool_msg = f"COOLING OFF: {ticker} locked 5 days (loss={pnl_pct:.1f}%)"
+                        logger.info(_cool_msg)
+                        try:
+                            from altdata.notifications.notifier import Notifier
+                            Notifier(self.config)._send_telegram(_cool_msg)
+                        except Exception:
+                            pass
+                except Exception as _coe:
+                    logger.debug("CoolingOff register error: %s", _coe)
 
             # Record trade close in closeloop_store
             try:
