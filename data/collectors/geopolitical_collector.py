@@ -378,25 +378,27 @@ def _fetch_gdelt(conn: sqlite3.Connection) -> List[GeopoliticalAlert]:
             data = resp.json()
             articles = data.get("articles", [])
             logger.info("GDELT query '%s': %d articles", query, len(articles))
+            url_fetches = 0
             for art in articles:
                 title = art.get("title", "")
                 url = art.get("url", "")
                 seendate = art.get("seendate", "")
                 domain = art.get("domain", "")
 
-                # Try to get full text (best-effort)
-                full_text = ""
-                if url:
-                    try:
-                        tr = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-                        if tr.ok:
-                            # Store raw HTML; NLP/parsing is downstream responsibility
-                            full_text = tr.text[:4000]
-                    except Exception:
-                        pass
-
                 severity = _classify_severity(title)
                 sectors = _identify_sectors(title)
+
+                # Fetch full text only for HIGH/CRITICAL articles, capped at 20 per query
+                # to avoid spending 250×10s = 2500s fetching low-value URLs
+                full_text = ""
+                if url and severity in ("HIGH", "CRITICAL") and url_fetches < 20:
+                    try:
+                        tr = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+                        if tr.ok:
+                            full_text = tr.text[:4000]
+                        url_fetches += 1
+                    except Exception:
+                        pass
                 modifier = _SEVERITY_MODIFIER.get(severity, 1.0)
 
                 conn.execute(
