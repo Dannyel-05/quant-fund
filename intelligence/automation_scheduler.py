@@ -93,7 +93,7 @@ def job_midday_check():
 
 
 def job_eod():
-    """21:30 UTC — end of day."""
+    """21:30 UTC — end of day + daily simulation."""
     logger.info("=== SCHEDULED: end of day ===")
     try:
         from execution.paper_trader import PaperTrader
@@ -103,9 +103,16 @@ def job_eod():
     except Exception as e:
         logger.error("EOD failed: %s", e)
 
+    # Daily simulation — runs after EOD, non-blocking
+    try:
+        from simulations.sim_scheduler import run_daily_simulation
+        run_daily_simulation()
+    except Exception as e:
+        logger.error("Daily simulation failed: %s", e)
+
 
 def job_weekly():
-    """Sunday 03:00 UTC — weekly deep work."""
+    """Sunday 03:00 UTC — weekly deep work (signal weight optimisation)."""
     if datetime.utcnow().weekday() != 6:  # 6 = Sunday
         return
     logger.info("=== SCHEDULED: weekly deep work ===")
@@ -115,6 +122,16 @@ def job_weekly():
         BatchRetrainer(config).run()
     except Exception as e:
         logger.error("Weekly batch retrain failed: %s", e)
+
+
+def job_retraining_monitor():
+    """Every 6 hours — check ML model performance triggers (stays dormant until threshold met)."""
+    logger.info("=== SCHEDULED: retraining monitor ===")
+    try:
+        from core.retraining_controller import RetrainingController
+        RetrainingController().run_monitoring_cycle()
+    except Exception as e:
+        logger.error("Retraining monitor failed: %s", e)
 
 
 def job_weekly_report():
@@ -145,7 +162,8 @@ class AutomationScheduler:
         schedule.every().day.at("21:30").do(job_eod)
         schedule.every().day.at("03:00").do(job_weekly)
         schedule.every().day.at("09:00").do(job_weekly_report)
-        logger.info("Automation scheduler configured with 8 jobs")
+        schedule.every(6).hours.do(job_retraining_monitor)
+        logger.info("Automation scheduler configured with 9 jobs")
 
     def run(self):
         self.setup()
