@@ -117,6 +117,19 @@ def job_weekly():
         logger.error("Weekly batch retrain failed: %s", e)
 
 
+def job_weekly_report():
+    """Sunday 09:00 UTC — Apollo weekly report (8 sections via Telegram)."""
+    if datetime.utcnow().weekday() != 6:  # 6 = Sunday
+        return
+    logger.info("=== SCHEDULED: weekly report ===")
+    try:
+        from monitoring.weekly_report import WeeklyReportGenerator
+        weekly_reporter = WeeklyReportGenerator()
+        weekly_reporter.send_weekly_report()
+    except Exception as e:
+        logger.error("Weekly report failed: %s", e)
+
+
 # ── Scheduler ─────────────────────────────────────────────────────────────────
 
 class AutomationScheduler:
@@ -131,7 +144,8 @@ class AutomationScheduler:
         schedule.every().day.at("18:00").do(job_midday_check)
         schedule.every().day.at("21:30").do(job_eod)
         schedule.every().day.at("03:00").do(job_weekly)
-        logger.info("Automation scheduler configured with 7 jobs")
+        schedule.every().day.at("09:00").do(job_weekly_report)
+        logger.info("Automation scheduler configured with 8 jobs")
 
     def run(self):
         self.setup()
