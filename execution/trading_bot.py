@@ -134,6 +134,14 @@ class TradingBot:
         except Exception as _e:
             logger.warning('PrivateBot start failed: %s', _e)
 
+        # ── Web Dashboard ─────────────────────────────────────────────
+        try:
+            from monitoring.dashboard.app import start_dashboard
+            import threading
+            threading.Thread(target=start_dashboard, daemon=True, name="apollo-dashboard").start()
+        except Exception as _e:
+            logger.warning('Dashboard start failed: %s', _e)
+
         # ── State tracking ────────────────────────────────────────────
         self.last_uk_scan: Optional[datetime] = None
         self.last_us_scan: Optional[datetime] = None
