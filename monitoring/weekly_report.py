@@ -314,21 +314,22 @@ def _section_3_data_health() -> str:
         lines = ["🔧 *Apollo Weekly Report 3/8 — Data Collection Health*", ""]
 
         # Check each database
+        # (db_name, db_path, table, timestamp_column)
         db_checks = [
-            ("closeloop", DB_CLOSELOOP if Path(DB_CLOSELOOP).stat().st_size > 0 else DB_CLOSELOOP_DATA, "trade_ledger"),
-            ("historical", DB_HISTORICAL, "price_history"),
-            ("frontier", DB_FRONTIER, "raw_signals"),
-            ("deepdata", DB_DEEPDATA, "options_flow"),
+            ("closeloop", DB_CLOSELOOP if Path(DB_CLOSELOOP).stat().st_size > 0 else DB_CLOSELOOP_DATA, "trade_ledger", "entry_date"),
+            ("historical", DB_HISTORICAL, "price_history", "date"),
+            ("frontier", DB_FRONTIER, "raw_signals", "collected_at"),
+            ("deepdata", DB_DEEPDATA, "options_flow", "collected_at"),
         ]
 
-        for db_name, db_path, table in db_checks:
+        for db_name, db_path, table, ts_col in db_checks:
             try:
                 row_count = _safe_scalar(db_path, f"SELECT COUNT(*) FROM {table}")
                 # Rows added today
                 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 try:
                     today_rows = _safe_scalar(db_path,
-                        f"SELECT COUNT(*) FROM {table} WHERE collected_at >= ?",
+                        f"SELECT COUNT(*) FROM {table} WHERE {ts_col} >= ?",
                         (today,))
                 except Exception:
                     today_rows = "?"

@@ -167,7 +167,7 @@ class DataCentreIntelligence:
         now = datetime.utcnow().isoformat()
         result: Dict[str, Any] = {
             "reit_performance": {},
-            "infrastructure_performance": {},
+            "infra_performance": {},
             "power_proxy_performance": {},
             "metrics": [],
         }

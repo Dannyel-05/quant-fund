@@ -88,7 +88,7 @@ altdata:
       min_watchers: 5
       scan_interval_minutes: 15
     weather:
-      api_key: 'ab94a3ece8f2c0de634e41ccc1d3561f'
+      api_key: '021ccba465e7ac40be005c5a33bdbf67'
       enabled: true
       locations:
         uk:
@@ -153,7 +153,7 @@ api_keys:
   marketstack: 7436a1ae783eea92b8c1c85cb3095049
   nasdaq_data_link: ES8zdjPCGhsNwN9CEUKH
   news_api: a7fd4712fe044e66be7e27f58a708348
-  openweathermap: ab94a3ece8f2c0de634e41ccc1d3561f
+  openweathermap: 021ccba465e7ac40be005c5a33bdbf67
   polygon: "pakSWxKjET_yzTpKmqmVcQLr29SJyIrH"
   quiver_quant: ""
   reddit_client_id: ''
