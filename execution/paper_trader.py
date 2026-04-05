@@ -390,6 +390,109 @@ class PaperTrader:
             logger.info("Restored %d existing open positions", loaded)
 
     # ------------------------------------------------------------------
+    # Position reconciliation
+    # ------------------------------------------------------------------
+
+    def reconcile_positions(self) -> dict:
+        """
+        Reconcile Alpaca paper positions against trade_ledger on startup.
+
+        Logic:
+          - Positions in Alpaca but NOT in trade_ledger → add to self.active
+          - Positions in trade_ledger (open) but NOT in Alpaca →
+              mark as phantom-closed (gross_pnl=0, is_phantom=1)
+
+        Returns {"matched": N, "added": N, "phantom_closed": N}.
+        """
+        result = {"matched": 0, "added": 0, "phantom_closed": 0}
+
+        # Fetch Alpaca positions
+        alpaca_tickers: set = set()
+        if self.use_alpaca and self.broker is not None:
+            try:
+                from execution.broker_interface import AlpacaPaperBroker
+                if isinstance(self.broker, AlpacaPaperBroker) and self.broker._connected:
+                    for p in (self.broker.get_positions() or []):
+                        sym = p.get("symbol", "")
+                        if sym:
+                            alpaca_tickers.add(sym)
+            except Exception as exc:
+                logger.debug("reconcile_positions Alpaca fetch: %s", exc)
+
+        # Fetch trade_ledger open positions
+        ledger_open: dict = {}
+        try:
+            import sqlite3 as _sq
+            con = _sq.connect("closeloop/storage/closeloop.db", timeout=10)
+            rows = con.execute(
+                "SELECT ticker, entry_date, entry_price FROM trade_ledger "
+                "WHERE exit_date IS NULL"
+            ).fetchall()
+            con.close()
+            for ticker, entry_date, entry_price in rows:
+                ledger_open[ticker] = {
+                    "entry_date":  entry_date,
+                    "entry_price": float(entry_price or 0),
+                }
+        except Exception as exc:
+            logger.debug("reconcile_positions ledger fetch: %s", exc)
+
+        if not alpaca_tickers and not ledger_open:
+            logger.info("reconcile_positions: Alpaca not available — skipping")
+            return result
+
+        # Matched positions
+        for ticker in alpaca_tickers & set(ledger_open):
+            result["matched"] += 1
+
+        # In Alpaca but not in ledger → add to self.active
+        for ticker in alpaca_tickers - set(ledger_open):
+            if ticker not in self.active:
+                self.active[ticker] = {
+                    "direction": 1,
+                    "entry_price": 0.0,
+                    "exit_date": None,
+                    "atr": 0, "target_price": 0, "target_delta": 0,
+                    "scale_out_done": [], "sector": "UNKNOWN",
+                    "shares": 0, "dry_up_days": 0, "market": "us",
+                    "context_at_open": {}, "signal_type": "reconciled",
+                    "tier": "TIER_1_SMALLCAP",
+                    "entry_date": datetime.utcnow().isoformat(),
+                }
+                result["added"] += 1
+                logger.info("reconcile: added %s (in Alpaca, missing from ledger)", ticker)
+
+        # In ledger but not in Alpaca → phantom-close
+        for ticker in set(ledger_open) - alpaca_tickers:
+            try:
+                import sqlite3 as _sq
+                con = _sq.connect("closeloop/storage/closeloop.db", timeout=10)
+                now_str = datetime.utcnow().isoformat()
+                entry_price = ledger_open[ticker]["entry_price"]
+                con.execute(
+                    "UPDATE trade_ledger SET exit_date=?, exit_price=?, "
+                    "gross_pnl=0.0, is_phantom=1 "
+                    "WHERE ticker=? AND exit_date IS NULL",
+                    (now_str, entry_price, ticker),
+                )
+                con.commit()
+                con.close()
+                # Remove from active if present
+                self.active.pop(ticker, None)
+                result["phantom_closed"] += 1
+                logger.info(
+                    "reconcile: phantom-closed %s (in ledger, missing from Alpaca)", ticker
+                )
+            except Exception as exc:
+                logger.debug("reconcile phantom-close %s: %s", ticker, exc)
+
+        logger.info(
+            "reconcile_positions complete: matched=%d added=%d phantom_closed=%d",
+            result["matched"], result["added"], result["phantom_closed"],
+        )
+        return result
+
+    # ------------------------------------------------------------------
     # Scheduling
     # ------------------------------------------------------------------
 

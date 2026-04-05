@@ -200,6 +200,41 @@ def _apis_responding():
         return f"API connectivity: {exc!s:.60}"
 
 
+def _alpaca_api_ok(config: dict):
+    """
+    Direct Alpaca API health check — GET /v2/account.
+    Saves last successful ping to output/alpaca_status.json.
+    Returns error string on failure, None on success.
+    """
+    try:
+        import json, requests as _req
+        api_keys  = config.get("api_keys", {})
+        alpaca_cfg = config.get("alpaca", {})
+        key    = api_keys.get("alpaca_api_key", "")
+        secret = api_keys.get("alpaca_secret_key", "")
+        base   = alpaca_cfg.get("base_url", "https://paper-api.alpaca.markets")
+        if not key or "PASTE" in key:
+            return None  # not configured — skip
+        headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
+        resp = _req.get(f"{base}/v2/account", headers=headers, timeout=6)
+        if resp.status_code == 200:
+            status = {
+                "connected": True,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "equity":    float(resp.json().get("portfolio_value", 0)),
+            }
+            try:
+                Path("output/alpaca_status.json").write_text(
+                    json.dumps(status, indent=2)
+                )
+            except Exception:
+                pass
+            return None  # OK
+        return f"Alpaca API HTTP {resp.status_code}"
+    except Exception as exc:
+        return f"Alpaca API: {exc!s:.80}"
+
+
 # ── main entry point ──────────────────────────────────────────────────────────
 
 def run_diagnostic(config: dict, quiet_hours: bool = False) -> dict:
@@ -225,6 +260,7 @@ def run_diagnostic(config: dict, quiet_hours: bool = False) -> dict:
         ("PM2 process running",                 _pm2_ok),
         ("No excessive errors last 6h",         _no_recent_errors),
         ("External API connectivity",           _apis_responding),
+        ("Alpaca API responding",               lambda: _alpaca_api_ok(config)),
     ]
 
     if mkt_open:

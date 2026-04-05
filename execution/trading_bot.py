@@ -468,6 +468,23 @@ class TradingBot:
         self._save_pid()
         self._save_status('STARTING')
 
+        # Reconcile Alpaca positions vs trade_ledger on every startup
+        try:
+            recon = self.trader.reconcile_positions()
+            if recon['added'] > 0 or recon['phantom_closed'] > 0:
+                _recon_msg = (
+                    f'✅ Position reconciliation: {recon["matched"]} matched, '
+                    f'{recon["added"]} added, {recon["phantom_closed"]} phantom entries cleaned'
+                )
+                logger.info(_recon_msg)
+                try:
+                    from altdata.notifications.notifier import Notifier
+                    Notifier(self.config)._send_telegram(_recon_msg)
+                except Exception:
+                    pass
+        except Exception as _rec_exc:
+            logger.debug('reconcile_positions startup: %s', _rec_exc)
+
         print('=' * 60)
         print('TRADING BOT STARTING')
         print('=' * 60)
@@ -504,6 +521,13 @@ class TradingBot:
                 # Morning briefing 06:00 GMT
                 if self.should_run_morning_briefing():
                     self.run_morning_briefing()
+
+                # Pre-flight (13:00 UTC), pre-market scan (14:00 UTC), EOD (21:15 UTC)
+                try:
+                    from monitoring.preflight_check import tick as _preflight_tick
+                    _preflight_tick(self.config, now=now, trader=self.trader)
+                except Exception as _pf_exc:
+                    logger.debug('preflight_tick: %s', _pf_exc)
 
                 # UK market scans
                 if self.is_market_open('UK') and self.is_scan_time('UK'):
