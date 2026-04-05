@@ -31,6 +31,13 @@ _UK_WEEKLY_REPORT_UTC_HOUR  = 6    # Sunday 6am UTC
 _DIAGNOSTIC_INTERVAL_HOURS  = 6
 _ALERT_CHECK_INTERVAL_SEC   = 60
 _RETRY_INTERVAL_MIN         = 5
+_QUIET_START_UTC             = 22   # quiet hours start (22:00 UTC)
+_QUIET_END_UTC               = 7    # quiet hours end   (07:00 UTC)
+
+
+def _is_quiet_hours(hour: int) -> bool:
+    """Returns True during 22:00-07:00 UTC — only CRITICAL alerts during this window."""
+    return hour >= _QUIET_START_UTC or hour < _QUIET_END_UTC
 
 
 class MonitorRunner:
@@ -106,7 +113,8 @@ class MonitorRunner:
         if (now.minute < 2
                 and diag_slot != self._last_diagnostic_hour):
             self._last_diagnostic_hour = diag_slot
-            self._spawn(run_diagnostic, self._config)
+            quiet = _is_quiet_hours(now.hour)
+            self._spawn(run_diagnostic, self._config, quiet)
 
         # ── 4. Instant alert checks every 60s ────────────────────────────
         elapsed = time.monotonic() - self._last_alert_ts

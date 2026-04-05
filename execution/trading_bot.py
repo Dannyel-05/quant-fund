@@ -202,6 +202,8 @@ class TradingBot:
                 stream_stats = get_stream_cache().stats()
             except Exception:
                 pass
+            _us_open = self.is_market_open('us')
+            _uk_open = self.is_market_open('uk')
             data = {
                 'status': status,
                 'timestamp': datetime.now().isoformat(),
@@ -216,6 +218,12 @@ class TradingBot:
                 'phase': phase_summary,
                 'use_alpaca': self.trader.use_alpaca,
                 'stream': stream_stats,
+                'us_market_open': _us_open,
+                'uk_market_open': _uk_open,
+                'market_status': (
+                    f"US: {'OPEN' if _us_open else 'CLOSED'} | "
+                    f"UK: {'OPEN' if _uk_open else 'CLOSED'}"
+                ),
             }
             if extra:
                 data.update(extra)

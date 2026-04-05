@@ -9,7 +9,7 @@ import json
 import logging
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple
 
@@ -26,6 +26,35 @@ _RAM_LIMIT_MB  = 1800
 _CPU_LIMIT_PCT = 80.0
 _DISK_LIMIT_PCT = 80.0
 _LOG_STALE_SEC  = 3600    # alert if a key log hasn't been written in 1h
+
+# Checks that are always sent even during quiet hours (22:00-07:00 UTC)
+_CRITICAL_CHECK_NAMES = {"All databases accessible", "PM2 process running"}
+
+
+def _any_market_open() -> bool:
+    """Returns True if US or UK market is currently open (UTC hours, weekday check)."""
+    try:
+        now = datetime.now(timezone.utc)
+        if now.weekday() >= 5:   # weekend
+            return False
+        h, m = now.hour, now.minute
+        now_mins = h * 60 + m
+        us_open = (14 * 60 + 30) <= now_mins < (21 * 60)
+        uk_open = (8  * 60     ) <= now_mins < (16 * 60 + 30)
+        return us_open or uk_open
+    except Exception:
+        return True  # assume open if unsure (fail safe)
+
+
+def _core_logs_ok():
+    """Like _logs_being_written but only checks quant_fund.log (market-closed variant)."""
+    stale = []
+    for log_path in ["logs/quant_fund.log"]:
+        age = get_log_last_write(log_path)
+        if age > _LOG_STALE_SEC:
+            stale.append(f"{log_path} (last write: {age/3600:.1f}h ago)")
+    if stale:
+        return "Stale logs: " + ", ".join(stale)
 
 _COLLECTOR_CLASSES = [
     ("data.collectors.rates_credit_collector",    "RatesCreditCollector"),
@@ -173,25 +202,38 @@ def _apis_responding():
 
 # ── main entry point ──────────────────────────────────────────────────────────
 
-def run_diagnostic(config: dict) -> dict:
+def run_diagnostic(config: dict, quiet_hours: bool = False) -> dict:
     """
     Run all checks, save to file, and send Telegram alert only if any fail.
+
+    quiet_hours=True  → only CRITICAL alerts (databases, PM2) are sent via Telegram;
+                        non-critical failures are saved to file but not notified.
+    Market-closed     → skips stream connectivity and alpaca_stream.log staleness.
+
     Returns {"passed": bool, "results": [(name, ok, detail)], "path": str}.
     """
     _DIAG_DIR.mkdir(parents=True, exist_ok=True)
+
+    mkt_open = _any_market_open()
 
     check_fns = [
         ("All 13 collectors responding",        _collectors_ok),
         ("RAM under 1.8GB",                     _ram_ok),
         ("CPU under 80%",                       _cpu_ok),
         ("Disk under 80%",                      _disk_ok),
-        ("Websocket stream connected",          _stream_ok),
         ("All databases accessible",            _databases_ok),
         ("PM2 process running",                 _pm2_ok),
         ("No excessive errors last 6h",         _no_recent_errors),
-        ("Log files being written",             _logs_being_written),
         ("External API connectivity",           _apis_responding),
     ]
+
+    if mkt_open:
+        # Include stream + full log checks only when markets are open
+        check_fns.insert(4, ("Websocket stream connected", _stream_ok))
+        check_fns.append(("Log files being written", _logs_being_written))
+    else:
+        # Market closed: only check core bot log (skip alpaca_stream.log)
+        check_fns.append(("Core log being written", _core_logs_ok))
 
     results = [_check(name, fn) for name, fn in check_fns]
     passed_all = all(r[1] for r in results)
@@ -220,8 +262,22 @@ def run_diagnostic(config: dict) -> dict:
 
     # ── alert if any check failed ─────────────────────────────────────────
     if not passed_all:
-        failures = [(n, d) for n, ok, d in results if not ok]
-        passing  = [n     for n, ok, d in results if ok]
+        all_failures = [(n, d) for n, ok, d in results if not ok]
+        passing      = [n      for n, ok, d in results if ok]
+
+        # Quiet hours (22:00-07:00 UTC): only send CRITICAL alerts
+        if quiet_hours:
+            failures = [(n, d) for n, d in all_failures if n in _CRITICAL_CHECK_NAMES]
+            if not failures:
+                logger.info(
+                    "Quiet hours — suppressing %d non-critical diagnostic alert(s): %s",
+                    len(all_failures),
+                    ", ".join(n for n, _ in all_failures),
+                )
+                return {"passed": passed_all, "results": results, "path": str(path)}
+        else:
+            failures = all_failures
+
         first_name, first_detail = failures[0]
         other_count = len(failures) - 1
 

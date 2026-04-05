@@ -24,9 +24,11 @@ from monitoring.system_stats import get_ram_mb
 
 logger = logging.getLogger(__name__)
 
-_ALERTS_DIR   = Path("logs/alerts")
-_RAM_CRITICAL = 1800   # MB
-_RAM_RESUME   = 1536   # 1.5 GB — resume stream below this
+_ALERTS_DIR        = Path("logs/alerts")
+_RAM_CRITICAL      = 1800   # MB
+_RAM_RESUME        = 1536   # 1.5 GB — resume stream below this
+_OUTAGE_STATE_FILE = Path("output/api_outage_state.json")
+_OUTAGE_REPEAT_H   = 6      # re-alert after this many hours if still down
 
 # Per-instance state
 _collector_fail_counts:  dict = {}   # name → consecutive fail count
@@ -35,6 +37,46 @@ _last_model_accuracy:    dict = {}   # signal_type → accuracy
 _stream_paused_for_ram:  bool = False
 _last_api_status:        dict = {}
 _last_log_scan_pos:      dict = {}   # log_path → byte offset
+
+# Rate-limiting for non-critical Telegram alerts (max 3 per hour)
+_hourly_alert_count: int = 0
+_hourly_alert_hour:  int = -1
+_MAX_NON_CRITICAL_PER_HOUR = 3
+
+
+def _rate_limited_send(config: dict, alert_type: str, text: str,
+                       critical: bool = False) -> bool:
+    """Send alert, subject to non-critical rate limiting (max 3/hour)."""
+    global _hourly_alert_count, _hourly_alert_hour
+    now_hour = datetime.utcnow().hour
+    if now_hour != _hourly_alert_hour:
+        _hourly_alert_hour  = now_hour
+        _hourly_alert_count = 0
+    if not critical:
+        if _hourly_alert_count >= _MAX_NON_CRITICAL_PER_HOUR:
+            logger.debug("Rate-limit: suppressing non-critical alert '%s'", alert_type)
+            return False
+        _hourly_alert_count += 1
+    return _send_alert(config, alert_type, text)
+
+
+# ── outage state helpers ───────────────────────────────────────────────────────
+
+def _load_outage_state() -> dict:
+    try:
+        if _OUTAGE_STATE_FILE.exists():
+            return json.loads(_OUTAGE_STATE_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+
+def _save_outage_state(state: dict) -> None:
+    try:
+        _OUTAGE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _OUTAGE_STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+    except Exception as exc:
+        logger.debug("save_outage_state: %s", exc)
 
 
 # ── send helpers ──────────────────────────────────────────────────────────────
@@ -130,11 +172,18 @@ def reset_collector_ok(collector_name: str) -> None:
 
 
 def check_api_health(config: dict) -> None:
-    """Check all APIs; alert immediately if one switches from working to broken."""
+    """
+    Check all APIs; alert on: first failure, every 6h if still down, and on recovery.
+    Uses output/api_outage_state.json to deduplicate across process restarts.
+    """
     global _last_api_status
     import requests as _req
 
     api_keys = config.get("api_keys", {})
+    impact_map = {
+        "finnhub": "earnings sentiment, news signals",
+        "fred":    "macro regime signals, rate signals",
+    }
     checks = {
         "finnhub":
             f"https://finnhub.io/api/v1/quote?symbol=AAPL&token={api_keys.get('finnhub','')}",
@@ -142,6 +191,10 @@ def check_api_health(config: dict) -> None:
             f"https://api.stlouisfed.org/fred/series/observations?series_id=FEDFUNDS"
             f"&api_key={api_keys.get('fred','')}&file_type=json&limit=1",
     }
+
+    outage_state = _load_outage_state()
+    now = datetime.utcnow()
+
     for name, url in checks.items():
         key = api_keys.get(name, "")
         if not key:
@@ -155,23 +208,77 @@ def check_api_health(config: dict) -> None:
         else:
             err = f"HTTP {resp.status_code}"
 
-        prev_ok = _last_api_status.get(name, True)
-        _last_api_status[name] = ok
-        if not ok and prev_ok:
-            # Just broke
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
-            impact_map = {
-                "finnhub": "earnings sentiment, news signals",
-                "fred":    "macro regime signals, rate signals",
-            }
-            text = (
-                f"🚨 API ALERT: {name} has stopped working\n"
-                f"Error: {err}\n"
-                f"Impact: {impact_map.get(name, 'signals from this source')}\n"
-                f"Fix: Check api_keys.{name} in config/settings.yaml\n"
-                f"Time: {ts}"
+        ts_str = now.strftime("%Y-%m-%d %H:%M:%S UTC")
+        api_entry = outage_state.get(name, {})
+
+        if not ok:
+            first_seen_str   = api_entry.get("first_seen")
+            last_alerted_str = api_entry.get("last_alerted")
+            already_down     = api_entry.get("is_down", False)
+
+            first_seen = (
+                datetime.fromisoformat(first_seen_str)
+                if first_seen_str else now
             )
-            _send_alert(config, "api_broken", text)
+            last_alerted = (
+                datetime.fromisoformat(last_alerted_str)
+                if last_alerted_str else None
+            )
+
+            hours_down = (now - first_seen).total_seconds() / 3600
+
+            should_alert = (
+                not already_down                                # first detection
+                or last_alerted is None                        # safety fallback
+                or (now - last_alerted).total_seconds() >= _OUTAGE_REPEAT_H * 3600
+            )
+
+            if should_alert:
+                if already_down:
+                    # Ongoing — include duration
+                    text = (
+                        f"🚨 API STILL DOWN: {name} has been unavailable for "
+                        f"{hours_down:.1f}h\n"
+                        f"Error: {err}\n"
+                        f"Impact: {impact_map.get(name, 'signals from this source')}\n"
+                        f"Fix: Check api_keys.{name} in config/settings.yaml\n"
+                        f"Time: {ts_str}"
+                    )
+                else:
+                    text = (
+                        f"🚨 API ALERT: {name} has stopped working\n"
+                        f"Error: {err}\n"
+                        f"Impact: {impact_map.get(name, 'signals from this source')}\n"
+                        f"Fix: Check api_keys.{name} in config/settings.yaml\n"
+                        f"Time: {ts_str}"
+                    )
+                _rate_limited_send(config, "api_broken", text)
+                outage_state[name] = {
+                    "is_down":      True,
+                    "first_seen":   first_seen.isoformat(),
+                    "last_alerted": now.isoformat(),
+                    "last_error":   err,
+                }
+            else:
+                # Still down but within 6h window — update state without alerting
+                outage_state[name] = {**api_entry, "last_error": err}
+
+        else:
+            # API is up — check if we need a recovery notification
+            if api_entry.get("is_down", False):
+                first_seen_str = api_entry.get("first_seen")
+                if first_seen_str:
+                    hours_down = (now - datetime.fromisoformat(first_seen_str)).total_seconds() / 3600
+                    text = (
+                        f"✅ {name.upper()} API RECOVERED after {hours_down:.1f}h\n"
+                        f"Impact: {impact_map.get(name, 'signals')} collection resuming\n"
+                        f"Time: {ts_str}"
+                    )
+                    _rate_limited_send(config, "api_recovered", text)
+            # Clear outage state
+            outage_state.pop(name, None)
+
+    _save_outage_state(outage_state)
 
 
 def check_log_errors(config: dict, log_path: str = "logs/quant_fund.log") -> None:

@@ -18,7 +18,7 @@ Trade autopsy is run automatically on every position close.
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -28,6 +28,59 @@ import schedule
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
+
+# ── Market hours constants (UTC) ─────────────────────────────────────────────
+# US NYSE/NASDAQ: 09:30-16:00 ET = 14:30-21:00 UTC
+_US_OPEN_UTC  = (14, 30)   # (hour, minute)
+_US_CLOSE_UTC = (21,  0)
+# UK LSE: 08:00-16:30 UTC
+_UK_OPEN_UTC  = ( 8,  0)
+_UK_CLOSE_UTC = (16, 30)
+
+
+def _is_market_open(market: str) -> bool:
+    """
+    Returns True if the specified market (us/uk) is currently open.
+    Uses MarketCalendar for holiday detection + UTC hour/minute check.
+    Data collection is NOT gated by this — only trade evaluation.
+    """
+    try:
+        from analysis.market_calendar import MarketCalendar
+        cal = MarketCalendar()
+        now = datetime.now(timezone.utc)
+        today = now.date()
+        if not cal.is_trading_day(market, today):
+            return False
+        h, m = now.hour, now.minute
+        now_mins = h * 60 + m
+        if market == "us":
+            open_mins  = _US_OPEN_UTC[0]  * 60 + _US_OPEN_UTC[1]
+            close_mins = _US_CLOSE_UTC[0] * 60 + _US_CLOSE_UTC[1]
+        else:
+            open_mins  = _UK_OPEN_UTC[0]  * 60 + _UK_OPEN_UTC[1]
+            close_mins = _UK_CLOSE_UTC[0] * 60 + _UK_CLOSE_UTC[1]
+        return open_mins <= now_mins < close_mins
+    except Exception:
+        return False
+
+
+def _next_market_open_str(market: str) -> str:
+    """Human-readable string of next market open, e.g. 'Monday 14:30 UTC'."""
+    try:
+        from analysis.market_calendar import MarketCalendar
+        from datetime import date, timedelta
+        cal = MarketCalendar()
+        today = date.today()
+        candidate = today
+        for _ in range(10):
+            if cal.is_trading_day(market, candidate):
+                break
+            candidate += timedelta(days=1)
+        day_name = candidate.strftime("%A")
+        h, m = (_US_OPEN_UTC if market == "us" else _UK_OPEN_UTC)
+        return f"{day_name} {h:02d}:{m:02d} UTC"
+    except Exception:
+        return "next trading day"
 
 # Scale-out fractions: [first_exit_pct_of_target, second_exit_pct_of_target]
 _SCALE_OUT_LEVELS = [0.50, 1.00]          # take partial at 50% and 100% of target
@@ -1438,6 +1491,14 @@ class PaperTrader:
         })
 
     def _check_exits(self, market: str) -> None:
+        # ── Market hours gate ─────────────────────────────────────────────
+        if not _is_market_open(market):
+            logger.debug(
+                "Market closed — skipping exit evaluation for %s (opens %s)",
+                market.upper(), _next_market_open_str(market),
+            )
+            return
+
         today = pd.Timestamp.now().normalize()
         for ticker in list(self.active.keys()):
             is_uk = ticker.endswith(".L")
@@ -1594,8 +1655,32 @@ class PaperTrader:
 
             return_pct = pnl_pct / 100.0
 
-            # Register with cooling-off tracker
-            if self._cooling_off is not None:
+            # ── Phantom trade detection ───────────────────────────────────
+            # A trade is phantom if: closed outside market hours AND
+            # (pnl == 0 OR held < 30 minutes).  Phantom trades must never
+            # count toward phase progression or trigger cooling-off.
+            _market = "uk" if ticker.endswith(".L") else "us"
+            _market_was_open = _is_market_open(_market)
+            try:
+                _held_minutes = (
+                    datetime.fromisoformat(exit_date) -
+                    datetime.fromisoformat(entry_date)
+                ).total_seconds() / 60.0
+            except Exception:
+                _held_minutes = 0.0
+            _is_phantom = (
+                not _market_was_open
+                and (abs(pnl_pct) < 0.001 or _held_minutes < 30)
+            )
+            if _is_phantom:
+                logger.debug(
+                    "Phantom trade detected: %s pnl=%.4f%% held=%.1fmin market_open=%s — "
+                    "skipping cooling-off, marking phantom",
+                    ticker, pnl_pct, _held_minutes, _market_was_open,
+                )
+
+            # Register with cooling-off tracker (skip for phantom trades)
+            if self._cooling_off is not None and not _is_phantom:
                 try:
                     from datetime import date as _date
                     self._cooling_off.register_exit(
@@ -1632,6 +1717,7 @@ class PaperTrader:
                         "holding_days": holding_days,
                         "exit_reason": reason,
                         "sector": pos.get("sector", "Unknown"),
+                        "is_phantom": 1 if _is_phantom else 0,
                     }
                     self._store.record_trade(closed_trade, context_at_open)
             except Exception as e:
