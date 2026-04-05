@@ -215,13 +215,15 @@ class InsiderTransactionCollector:
             filing_id = filing_meta.get("filing_id", "")
             if not filing_id:
                 continue
-            # Construct the filing index URL
-            idx_url = f"{_EDGAR_BASE}/Archives/edgar/data/{filing_id}-index.htm"
-            # Try the primary XML document via accession number pattern
-            accession = filing_id.replace("/", "").replace("-", "")
+            # filing_id format from EDGAR search: "XXXXXXXXXX-YY-NNNNNN:document.xml"
+            id_parts = filing_id.split(":")
+            accession_dashes = id_parts[0]         # e.g. "0001840706-26-000084"
+            doc_name = id_parts[1] if len(id_parts) > 1 else ""
+            accession_nodash = accession_dashes.replace("-", "")  # "000184070626000084"
+            cik = accession_dashes.split("-")[0]   # e.g. "0001840706"
             xml_url = (
                 f"{_EDGAR_BASE}/Archives/edgar/data/"
-                f"{accession[:10]}/{accession}/{accession}-primary.xml"
+                f"{cik}/{accession_nodash}/{doc_name}"
             )
             parsed = self.parse_form4_xml(xml_url)
             if parsed and parsed.get("transactions"):

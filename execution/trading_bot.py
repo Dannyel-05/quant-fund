@@ -169,6 +169,8 @@ class TradingBot:
             ('tech_intel',  'data.collectors.technology_intelligence', 'TechnologyIntelligence', 'config'),
             ('usa_spending','data.collectors.government_data_collector', 'USASpendingCollector', 'config'),
             ('bls',         'data.collectors.government_data_collector', 'BLSCollector', 'config'),
+            ('insider_txn', 'data.collectors.insider_transaction_collector', 'InsiderTransactionCollector', 'none'),
+            ('job_postings','data.collectors.job_postings_collector', 'JobPostingsCollector', 'config'),
             ('news',        'altdata.collector.news_collector', 'NewsCollector', 'config'),
             ('edgar',       'altdata.collector.sec_edgar_collector', 'SECEdgarCollector', 'config'),
             ('finnhub',     'altdata.collector.finnhub_collector', 'FinnhubCollector', 'config'),
@@ -323,6 +325,26 @@ class TradingBot:
                     senate = collector.get_senate_trades(days_back=30)
                     house = collector.get_house_trades(days_back=30)
                     collected[name] = len(senate) + len(house)
+                elif name == 'insider_txn' and hasattr(collector, 'collect'):
+                    result = collector.collect(days_back=7, max_filings=100)
+                    collected[name] = result if isinstance(result, int) else 0
+                elif name == 'job_postings' and hasattr(collector, 'collect'):
+                    # Collect for current open positions (Tier 3 — runs infrequently)
+                    try:
+                        import sqlite3 as _sqlite3
+                        _cl_db = self.config.get('closeloop', {}).get('db_path',
+                                 'closeloop/storage/closeloop.db')
+                        _con = _sqlite3.connect(_cl_db, timeout=5)
+                        _rows = _con.execute(
+                            "SELECT DISTINCT ticker FROM trade_ledger "
+                            "WHERE exit_date IS NULL AND is_phantom = 0 LIMIT 50"
+                        ).fetchall()
+                        _con.close()
+                        ticker_map = {r[0]: r[0] for r in _rows}
+                    except Exception:
+                        ticker_map = {}
+                    result = collector.collect(ticker_map) if ticker_map else 0
+                    collected[name] = result if isinstance(result, int) else 0
                 elif hasattr(collector, 'collect'):
                     result = collector.collect(market='us')
                     collected[name] = len(result) if result else 0
