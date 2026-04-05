@@ -36,6 +36,11 @@ SIGNAL_TYPES = [
 ]
 
 
+def _esc(text) -> str:
+    """Escape underscores for Telegram Markdown v1 (prevents italic parsing)."""
+    return str(text).replace("_", r"\_")
+
+
 def _open_db(path: str) -> sqlite3.Connection:
     """Open a SQLite connection in WAL mode (read-only safe)."""
     conn = sqlite3.connect(path, timeout=10)
@@ -218,13 +223,13 @@ def _section_1_performance(week_start: str, week_end: str) -> str:
         if best:
             lines += [
                 "",
-                f"🏆 Best trade: *{best.get('ticker','?')}* {best.get('pnl_pct',0):+.1f}% "
-                f"| Signal: {best.get('signals_at_entry','?')[:30]} | {best.get('holding_days','?')}d hold",
+                f"🏆 Best trade: *{_esc(best.get('ticker','?'))}* {best.get('pnl_pct',0):+.1f}% "
+                f"| Signal: {_esc(best.get('signals_at_entry','?')[:30])} | {best.get('holding_days','?')}d hold",
             ]
         if worst:
             lines += [
-                f"💀 Worst trade: *{worst.get('ticker','?')}* {worst.get('pnl_pct',0):+.1f}% "
-                f"| Signal: {worst.get('signals_at_entry','?')[:30]} | {worst.get('holding_days','?')}d hold",
+                f"💀 Worst trade: *{_esc(worst.get('ticker','?'))}* {worst.get('pnl_pct',0):+.1f}% "
+                f"| Signal: {_esc(worst.get('signals_at_entry','?')[:30])} | {worst.get('holding_days','?')}d hold",
             ]
 
         return "\n".join(lines)
@@ -425,24 +430,24 @@ def _section_4_phase_progress(week_start: str, week_end: str) -> str:
         lines = [
             "📈 *Apollo Weekly Report 4/8 — Phase Progress*",
             "",
-            f"🎯 Current phase: *PHASE_{current_phase_num}*",
+            f"🎯 Current phase: *PHASE\_{current_phase_num}*",
             f"✅ Real trades (non-phantom, non-zero PnL): *{real_trades}*",
             f"👻 Phantom trades: {phantom_count} ⚠️ (these are paper-only, not counted)",
             f"📊 Trades this week: {week_real}",
             "",
-            f"🏁 Next phase: PHASE_{next_phase} (threshold: {next_threshold} real trades)",
+            f"🏁 Next phase: PHASE\_{next_phase} (threshold: {next_threshold} real trades)",
             f"📌 Trades to next phase: {trades_to_next}",
         ]
 
         if daily_avg > 0 and days_to_next < 365:
-            lines.append(f"⏱ Estimated time to PHASE_{next_phase}: ~{days_to_next:.0f} days "
+            lines.append(f"⏱ Estimated time to PHASE\_{next_phase}: ~{days_to_next:.0f} days "
                          f"(at {daily_avg:.1f} trades/day)")
         else:
-            lines.append(f"⏱ Estimated time to PHASE_{next_phase}: insufficient data")
+            lines.append(f"⏱ Estimated time to PHASE\_{next_phase}: insufficient data")
 
         lines += [
             "",
-            f"🔭 Distance to PHASE_4: {max(0, 100 - (real_trades or 0))} trades",
+            f"🔭 Distance to PHASE\_4: {max(0, 100 - (real_trades or 0))} trades",
         ]
 
         phase_notes = {
@@ -631,7 +636,7 @@ def _section_7_opportunities(week_start: str, week_end: str) -> str:
                 outcome = sig.get("outcome_return")
                 outcome_str = f"{outcome:+.2f}%" if outcome is not None else "pending"
                 lines.append(
-                    f"{i}. *{ticker}* — {sig_name} | conf {conf:.2f} | outcome: {outcome_str}"
+                    f"{i}. *{_esc(ticker)}* — {_esc(sig_name)} | conf {conf:.2f} | outcome: {outcome_str}"
                 )
         else:
             # Fallback: use trade ledger
@@ -644,8 +649,8 @@ def _section_7_opportunities(week_start: str, week_end: str) -> str:
                 lines.append("*Top performing setups this week:*")
                 for i, t in enumerate(top_trades, 1):
                     lines.append(
-                        f"{i}. *{t.get('ticker','?')}* | {t.get('pnl_pct',0):+.1f}% | "
-                        f"Signal: {(t.get('signals_at_entry') or '?')[:25]} | "
+                        f"{i}. *{_esc(t.get('ticker','?'))}* | {t.get('pnl_pct',0):+.1f}% | "
+                        f"Signal: {_esc((t.get('signals_at_entry') or '?')[:25])} | "
                         f"Regime: {t.get('macro_regime','?')}"
                     )
             else:
