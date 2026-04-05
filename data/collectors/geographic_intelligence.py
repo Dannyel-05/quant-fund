@@ -102,11 +102,10 @@ _WAQI_CITIES: List[str] = [
 
 # FRED regional series
 _FRED_REGIONAL_SERIES: Dict[str, str] = {
-    "PHILFRBSURPM":  "Philadelphia Fed Manufacturing Survey",
-    "GAUTHMPNSA":    "Empire State Manufacturing — Authority",
-    "CHIPMINDX":     "Chicago PMI",
-    "DALLMFG":       "Dallas Fed Manufacturing Index",
-    "KCFSI":         "Kansas City Financial Stress Index",
+    "CFNAI":   "Chicago Fed National Activity Index",
+    "MANEMP":  "Total Manufacturing Employment",
+    "STLFSI4": "St. Louis Fed Financial Stress Index",
+    "KCFSI":   "Kansas City Financial Stress Index",
 }
 
 # Open-Meteo weather variables to request
@@ -657,7 +656,7 @@ class GeographicIntelligence:
                         "latitude":      lat,
                         "longitude":     lon,
                         "hourly":        _POLLEN_VARS,
-                        "forecast_days": 16,
+                        "forecast_days": 7,
                     },
                     timeout=30,
                 )
@@ -922,15 +921,15 @@ class GeographicIntelligence:
                         continue
                     obs_rows.append((
                         series_name, series_id, obs["date"],
-                        val, "FRED", json.dumps(obs),
+                        val, "FRED",
                     ))
 
                 with self._perm_conn() as conn:
                     conn.executemany(
                         """
                         INSERT OR IGNORE INTO raw_macro_data
-                          (series_name, series_id, date, value, source, raw_json)
-                        VALUES (?,?,?,?,?,?)
+                          (series_name, series_id, date, value, source)
+                        VALUES (?,?,?,?,?)
                         """,
                         obs_rows
                     )
@@ -955,14 +954,17 @@ class GeographicIntelligence:
 
         inserted = 0
         try:
+            from datetime import datetime, timedelta
+            start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT00")
             data = _get(
                 "https://api.eia.gov/v2/electricity/rto/region-data/data/",
                 params={
-                    "api_key":         self._eia_key,
-                    "frequency":       "daily",
-                    "data[0]":         "value",
-                    "facets[type][]":  "D",
-                    "length":          365,
+                    "api_key":        self._eia_key,
+                    "frequency":      "hourly",
+                    "data[0]":        "value",
+                    "facets[type][]": "D",
+                    "start":          start,
+                    "length":         5000,
                 },
                 timeout=30,
             )
@@ -980,15 +982,15 @@ class GeographicIntelligence:
                     continue
                 rows.append((
                     series_name, None, date,
-                    float(value), "EIA", json.dumps(item),
+                    float(value), "EIA",
                 ))
 
             with self._perm_conn() as conn:
                 conn.executemany(
                     """
                     INSERT OR IGNORE INTO raw_macro_data
-                      (series_name, series_id, date, value, source, raw_json)
-                    VALUES (?,?,?,?,?,?)
+                      (series_name, series_id, date, value, source)
+                    VALUES (?,?,?,?,?)
                     """,
                     rows
                 )
