@@ -126,6 +126,14 @@ class TradingBot:
         except Exception as _e:
             logger.warning('MonitorRunner start failed: %s', _e)
 
+        # ── Private Bot (Telegram NLP + inline menu) ──────────────────
+        self.private_bot = None
+        try:
+            from monitoring.private_bot import start_private_bot
+            self.private_bot = start_private_bot(config)
+        except Exception as _e:
+            logger.warning('PrivateBot start failed: %s', _e)
+
         # ── State tracking ────────────────────────────────────────────
         self.last_uk_scan: Optional[datetime] = None
         self.last_us_scan: Optional[datetime] = None
