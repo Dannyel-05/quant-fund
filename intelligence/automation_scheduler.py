@@ -44,6 +44,22 @@ def job_collect_data():
         logger.error("Data collection failed: %s", e)
 
 
+def job_update_prices():
+    """06:30 UTC — update daily price history for full universe (last 5 days)."""
+    logger.info("=== SCHEDULED: price history update ===")
+    try:
+        import subprocess
+        from datetime import datetime, timedelta
+        start = (datetime.utcnow() - timedelta(days=5)).strftime("%Y-%m-%d")
+        subprocess.run(
+            [sys.executable, "main.py", "historical", "collect",
+             "--phases", "prices", "--start", start],
+            cwd=_ROOT, timeout=1800
+        )
+    except Exception as e:
+        logger.error("Price history update failed: %s", e)
+
+
 def job_morning_intelligence():
     """07:00 UTC — morning macro briefing."""
     logger.info("=== SCHEDULED: morning intelligence ===")
@@ -155,6 +171,7 @@ class AutomationScheduler:
 
     def setup(self):
         schedule.every().day.at("06:00").do(job_collect_data)
+        schedule.every().day.at("06:30").do(job_update_prices)
         schedule.every().day.at("07:00").do(job_morning_intelligence)
         schedule.every().day.at("08:15").do(job_uk_scan)
         schedule.every().day.at("14:45").do(job_us_scan)
@@ -163,7 +180,7 @@ class AutomationScheduler:
         schedule.every().day.at("03:00").do(job_weekly)
         schedule.every().day.at("09:00").do(job_weekly_report)
         schedule.every(6).hours.do(job_retraining_monitor)
-        logger.info("Automation scheduler configured with 9 jobs")
+        logger.info("Automation scheduler configured with 10 jobs")
 
     def run(self):
         self.setup()
